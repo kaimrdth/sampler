@@ -764,7 +764,7 @@ class PO33Sampler {
         // Loop toggle control
         document.getElementById('loop-toggle').addEventListener('click', (e) => {
             this.sampleParams[this.editingPad].loopOnHold = !this.sampleParams[this.editingPad].loopOnHold;
-            e.target.classList.toggle('active', this.sampleParams[this.editingPad].loopOnHold);
+            e.currentTarget.classList.toggle('active', this.sampleParams[this.editingPad].loopOnHold);
         });
 
     }

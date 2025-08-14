@@ -840,13 +840,17 @@ body {
     background: transparent;
     color: #ccc;
     border: 1px solid rgba(255, 255, 255, 0.2);
-    padding: 6px;
+    padding: 4px 8px;
     cursor: pointer;
     transition: all 0.15s ease;
     border-radius: 2px;
     display: flex;
     align-items: center;
     justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    min-width: 32px;
 }
 
 .loop-btn:hover {
@@ -861,9 +865,6 @@ body {
     box-shadow: 0 0 4px rgba(249, 115, 22, 0.4);
 }
 
-.loop-btn svg {
-    transition: all 0.15s ease;
-}
 
 .status {
     text-align: center;

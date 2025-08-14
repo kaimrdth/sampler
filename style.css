@@ -508,7 +508,6 @@ body {
 }
 
 .slider-group input[type="range"] {
-    writing-mode: bt-lr;
     -webkit-appearance: slider-vertical;
     appearance: none;
     width: 20px;
@@ -516,6 +515,8 @@ body {
     background: rgba(255, 255, 255, 0.1);
     outline: none;
     cursor: pointer;
+    transform: rotate(-90deg);
+    transform-origin: center;
 }
 
 .slider-group input[type="range"]::-webkit-slider-thumb {
@@ -745,6 +746,41 @@ body {
     font-size: 9px;
     color: #999;
     letter-spacing: 0.2px;
+}
+
+.loop-control {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 8px;
+}
+
+.loop-btn {
+    background: transparent;
+    color: #ccc;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.loop-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.loop-btn.active {
+    background: #f97316;
+    color: #fff;
+    border-color: #f97316;
+    box-shadow: 0 0 4px rgba(249, 115, 22, 0.4);
+}
+
+.loop-btn svg {
+    transition: all 0.15s ease;
 }
 
 .status {

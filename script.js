@@ -772,8 +772,9 @@ class PO33Sampler {
         });
 
         // Loop toggle control
-        document.getElementById('loop-toggle').addEventListener('change', (e) => {
-            this.sampleParams[this.editingPad].loopOnHold = e.target.checked;
+        document.getElementById('loop-toggle').addEventListener('click', (e) => {
+            this.sampleParams[this.editingPad].loopOnHold = !this.sampleParams[this.editingPad].loopOnHold;
+            e.target.classList.toggle('active', this.sampleParams[this.editingPad].loopOnHold);
         });
 
     }
@@ -807,7 +808,7 @@ class PO33Sampler {
         document.querySelector(`input[name="poly-mode"][value="${params.polyMode}"]`).checked = true;
         
         // Load loop toggle state
-        document.getElementById('loop-toggle').checked = params.loopOnHold;
+        document.getElementById('loop-toggle').classList.toggle('active', params.loopOnHold);
     }
 
     drawWaveform() {

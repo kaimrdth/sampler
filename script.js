@@ -39,6 +39,7 @@ class PO33Sampler {
             sustain: 0.8,
             release: 8.0,
             pitch: 1.0,
+            volume: 0.8,     // Volume level (0-1)
             filterType: 'lowpass',
             filterFreq: 8000,
             filterRes: 1,
@@ -222,6 +223,11 @@ class PO33Sampler {
         } else if (this.isEditMode) {
             console.log('Edit mode - selecting pad for editing');
             this.editingPad = index;
+            // Sync sequencer selection if sequencer mode is also active
+            if (this.isSequencerMode) {
+                this.selectedPad = index;
+                this.updateSequencerPadSelection();
+            }
             this.updateEditMode();
             // Also play the sample if it exists so you can test while editing
             if (this.samples[index]) {
@@ -515,17 +521,20 @@ class PO33Sampler {
             // Start with silence
             gainNode.gain.setValueAtTime(0, currentTime);
             
+            // Apply volume scaling to envelope
+            const maxGain = params.volume;
+            
             // Attack phase
-            gainNode.gain.linearRampToValueAtTime(0.8, currentTime + attackTime);
+            gainNode.gain.linearRampToValueAtTime(maxGain, currentTime + attackTime);
             
             // Decay phase
-            gainNode.gain.linearRampToValueAtTime(0.8 * sustainLevel, currentTime + attackTime + decayTime);
+            gainNode.gain.linearRampToValueAtTime(maxGain * sustainLevel, currentTime + attackTime + decayTime);
             
             // Sustain phase (maintain level until release)
             const sustainEnd = currentTime + attackTime + decayTime + 0.1; // Short sustain for triggered samples
             
             // Release phase
-            gainNode.gain.setValueAtTime(0.8 * sustainLevel, sustainEnd);
+            gainNode.gain.setValueAtTime(maxGain * sustainLevel, sustainEnd);
             gainNode.gain.linearRampToValueAtTime(0, sustainEnd + releaseTime);
             
             // Track source for mono mode or looping
@@ -740,6 +749,9 @@ class PO33Sampler {
         this.setupADSRControl('sustain', 0, 1, 0.01);
         this.setupADSRControl('release', 0, 10, 0.01);
 
+        // Volume control - setup as radial knob
+        this.setupRadialKnob('volume', 0, 1, 0.01);
+
         // Pitch control - setup as radial knob
         this.setupRadialKnob('pitch', 0.5, 2, 0.01);
 
@@ -797,6 +809,19 @@ class PO33Sampler {
         document.getElementById('release-knob').value = params.release;
         document.getElementById('release-value').textContent = params.release.toFixed(2);
         updateKnobRotation('release', params.release, 0, 10);
+        
+        // Load volume value and update visual rotation
+        document.getElementById('volume-knob').value = params.volume;
+        document.getElementById('volume-value').textContent = params.volume.toFixed(2);
+        const updateVolumeKnobRotation = (value, min, max) => {
+            const indicator = document.getElementById('volume-indicator');
+            if (indicator) {
+                const normalizedValue = (value - min) / (max - min);
+                const rotationAngle = -135 + (normalizedValue * 270);
+                indicator.style.transform = `translateX(-50%) rotate(${rotationAngle}deg)`;
+            }
+        };
+        updateVolumeKnobRotation(params.volume, 0, 1);
         
         // Load pitch value and update visual rotation
         document.getElementById('pitch-knob').value = params.pitch;
@@ -1365,7 +1390,9 @@ class PO33Sampler {
 
         // Update value display based on parameter type
         const updateValueDisplay = (value) => {
-            if (paramName === 'pitch') {
+            if (paramName === 'volume') {
+                valueDisplay.textContent = value.toFixed(2);
+            } else if (paramName === 'pitch') {
                 const semitones = Math.round(12 * Math.log2(value));
                 valueDisplay.textContent = semitones > 0 ? `+${semitones}` : semitones.toString();
             } else if (paramName === 'filter-freq') {
@@ -1381,7 +1408,9 @@ class PO33Sampler {
         knob.addEventListener('input', (e) => {
             if (!isDragging) {
                 const value = parseFloat(e.target.value);
-                if (paramName === 'pitch') {
+                if (paramName === 'volume') {
+                    this.sampleParams[this.editingPad].volume = value;
+                } else if (paramName === 'pitch') {
                     this.sampleParams[this.editingPad].pitch = value;
                 } else if (paramName === 'filter-freq') {
                     this.sampleParams[this.editingPad].filterFreq = value;
@@ -1418,7 +1447,9 @@ class PO33Sampler {
             
             if (Math.abs(newValue - parseFloat(knob.value)) > step / 2) {
                 knob.value = newValue;
-                if (paramName === 'pitch') {
+                if (paramName === 'volume') {
+                    this.sampleParams[this.editingPad].volume = newValue;
+                } else if (paramName === 'pitch') {
                     this.sampleParams[this.editingPad].pitch = newValue;
                 } else if (paramName === 'filter-freq') {
                     this.sampleParams[this.editingPad].filterFreq = newValue;

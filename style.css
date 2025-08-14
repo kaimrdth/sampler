@@ -717,13 +717,13 @@ body {
 }
 
 .mute-btn, .solo-btn {
-    width: 12px;
-    height: 12px;
+    width: 16px;
+    height: 16px;
     border: none;
     border-radius: 1px;
     cursor: pointer;
     font-family: inherit;
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 500;
     line-height: 1;
     transition: all 0.15s ease;
@@ -784,8 +784,8 @@ body {
     }
     
     .mute-btn, .solo-btn {
-        width: 10px;
-        height: 10px;
-        font-size: 7px;
+        width: 14px;
+        height: 14px;
+        font-size: 9px;
     }
 }

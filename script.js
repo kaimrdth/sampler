@@ -1095,11 +1095,25 @@ class PO33Sampler {
                 e.stopPropagation();
                 this.toggleMute(index);
             });
+            
+            // Add touch support for mobile
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.toggleMute(index);
+            });
         });
 
         // Add event listeners for all solo buttons
         document.querySelectorAll('.solo-btn').forEach((btn, index) => {
             btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.toggleSolo(index);
+            });
+            
+            // Add touch support for mobile
+            btn.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 this.toggleSolo(index);

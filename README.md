@@ -48,9 +48,9 @@ A browser-based **sampler drum machine** providing real-time audio sampling, seq
 
 ```mermaid
 flowchart LR
-    Mic[Microphone / Audio File] -->|MediaRecorder / decodeAudioData| Buffer[AudioBuffer]
-    Buffer --> Source[AudioBufferSourceNode]
-    Source --> Filter[BiquadFilterNode]
-    Filter --> Gain[GainNode (ADSR Envelope)]
-    Gain --> Output[Speakers]
+    Mic["Microphone / Audio File"] -->|MediaRecorder / decodeAudioData| Buffer["AudioBuffer"]
+    Buffer --> Source["AudioBufferSourceNode"]
+    Source --> Filter["BiquadFilterNode"]
+    Filter --> Gain["GainNode (ADSR Envelope)"]
+    Gain --> Output["Speakers"]
 ```

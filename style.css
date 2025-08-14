@@ -510,20 +510,19 @@ body {
 .slider-group input[type="range"] {
     -webkit-appearance: slider-vertical;
     appearance: none;
-    width: 20px;
+    width: 4px;
     height: 60px;
     background: rgba(255, 255, 255, 0.1);
     outline: none;
     cursor: pointer;
-    transform: rotate(-90deg);
-    transform-origin: center;
+    writing-mode: bt-lr;
 }
 
 .slider-group input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 12px;
-    height: 6px;
+    width: 14px;
+    height: 8px;
     background: var(--edit-accent-color, #8b7355) !important;
     border-radius: 2px;
     cursor: pointer;
@@ -531,8 +530,8 @@ body {
 }
 
 .slider-group input[type="range"]::-moz-range-thumb {
-    width: 12px;
-    height: 6px;
+    width: 14px;
+    height: 8px;
     background: var(--edit-accent-color, #8b7355) !important;
     border-radius: 2px;
     cursor: pointer;

@@ -24,7 +24,8 @@ class PO33Sampler {
         
         // Metronome properties
         this.metronomeEnabled = false;
-        this.metronomeSound = null;
+        this.metronomeHighSound = null;
+        this.metronomeLowSound = null;
         
         // Track active audio sources for mono mode
         this.activeSources = new Array(16).fill(null);
@@ -639,7 +640,7 @@ class PO33Sampler {
         this.isSequencerPlaying = true;
         this.currentStep = 0;
         
-        const stepTime = (60 / this.tempo / 4) * 1000;
+        const stepTime = (60 / this.tempo) * 1000;
         
         this.stepInterval = setInterval(() => {
             this.playStep();
@@ -1645,18 +1646,24 @@ class PO33Sampler {
         const duration = 0.1; // 100ms click
         const bufferLength = sampleRate * duration;
         
-        const buffer = this.audioContext.createBuffer(1, bufferLength, sampleRate);
-        const data = buffer.getChannelData(0);
+        // Create two different pitched sounds - high for beat 1, lower for beats 2-4
+        this.metronomeHighSound = this.audioContext.createBuffer(1, bufferLength, sampleRate);
+        this.metronomeLowSound = this.audioContext.createBuffer(1, bufferLength, sampleRate);
         
-        // Generate a short click sound (sine wave with quick decay)
+        const highData = this.metronomeHighSound.getChannelData(0);
+        const lowData = this.metronomeLowSound.getChannelData(0);
+        
+        // Generate click sounds with different frequencies
         for (let i = 0; i < bufferLength; i++) {
             const t = i / sampleRate;
-            const frequency = 800; // 800Hz click
             const envelope = Math.exp(-t * 20); // Quick decay
-            data[i] = Math.sin(2 * Math.PI * frequency * t) * envelope * 0.3;
+            
+            // High pitch for first beat (1000Hz)
+            highData[i] = Math.sin(2 * Math.PI * 1000 * t) * envelope * 0.3;
+            
+            // Lower pitch for other beats (600Hz)
+            lowData[i] = Math.sin(2 * Math.PI * 600 * t) * envelope * 0.3;
         }
-        
-        this.metronomeSound = buffer;
     }
 
     toggleMetronome() {
@@ -1666,7 +1673,7 @@ class PO33Sampler {
     }
 
     playMetronomeClick() {
-        if (!this.metronomeSound || !this.audioContext) return;
+        if ((!this.metronomeHighSound || !this.metronomeLowSound) || !this.audioContext) return;
         
         try {
             // Ensure audio context is ready
@@ -1677,13 +1684,14 @@ class PO33Sampler {
             const source = this.audioContext.createBufferSource();
             const gainNode = this.audioContext.createGain();
             
-            source.buffer = this.metronomeSound;
+            // Use high pitch for first beat (step 0, 4, 8, 12), low pitch for others
+            const isFirstBeat = this.currentStep % 4 === 0;
+            source.buffer = isFirstBeat ? this.metronomeHighSound : this.metronomeLowSound;
+            
             source.connect(gainNode);
             gainNode.connect(this.audioContext.destination);
             
-            // Different volume for downbeats (steps 0, 4, 8, 12)
-            const isDownbeat = this.currentStep % 4 === 0;
-            gainNode.gain.value = isDownbeat ? 0.5 : 0.3;
+            gainNode.gain.value = 0.4;
             
             source.start();
         } catch (error) {

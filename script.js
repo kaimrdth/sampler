@@ -13,7 +13,10 @@ class PO33Sampler {
         this.isEditMode = false;
         this.editingPad = 0;
         this.currentStep = 0;
-        this.sequencePatterns = new Array(16).fill(null).map(() => new Array(16).fill(false));
+        this.sequencePatterns = new Array(4).fill(null).map(() => 
+            new Array(16).fill(null).map(() => new Array(16).fill(false))
+        );
+        this.currentBank = 0;
         this.selectedPad = 0;
         this.tempo = 120;
         this.stepInterval = null;
@@ -54,6 +57,7 @@ class PO33Sampler {
         this.updateTempo();
         this.applyPadColors();
         this.setupMuteSoloControls();
+        this.updateBankIndicators();
     }
 
     generateRandomPadColors() {
@@ -136,6 +140,11 @@ class PO33Sampler {
         
         // Clear pattern button
         document.getElementById('clear-pattern-btn').addEventListener('click', () => this.clearPattern());
+        
+        // Bank selection buttons
+        document.querySelectorAll('.bank-btn').forEach((btn, index) => {
+            btn.addEventListener('click', () => this.switchBank(index));
+        });
         
         document.querySelectorAll('.pad').forEach((pad, index) => {
             pad.addEventListener('mousedown', () => this.handlePadPress(index));
@@ -587,9 +596,12 @@ class PO33Sampler {
     toggleStep(stepIndex) {
         if (!this.isSequencerMode) return;
         
-        this.sequencePatterns[this.selectedPad][stepIndex] = !this.sequencePatterns[this.selectedPad][stepIndex];
+        this.sequencePatterns[this.currentBank][this.selectedPad][stepIndex] = !this.sequencePatterns[this.currentBank][this.selectedPad][stepIndex];
         const step = document.querySelector(`[data-step="${stepIndex}"]`);
-        step.classList.toggle('active', this.sequencePatterns[this.selectedPad][stepIndex]);
+        step.classList.toggle('active', this.sequencePatterns[this.currentBank][this.selectedPad][stepIndex]);
+        
+        // Update bank indicators
+        this.updateBankIndicators();
     }
 
     togglePlay() {
@@ -652,7 +664,7 @@ class PO33Sampler {
 
         // Play all pads that have this step enabled
         for (let padIndex = 0; padIndex < 16; padIndex++) {
-            if (this.sequencePatterns[padIndex][this.currentStep]) {
+            if (this.sequencePatterns[this.currentBank][padIndex][this.currentStep]) {
                 this.playSample(padIndex);
                 this.triggerPadGlow(padIndex);
             }
@@ -1003,7 +1015,7 @@ class PO33Sampler {
 
     loadSequencePattern() {
         // Load the pattern for the currently selected pad
-        const pattern = this.sequencePatterns[this.selectedPad];
+        const pattern = this.sequencePatterns[this.currentBank][this.selectedPad];
         document.querySelectorAll('.step').forEach((step, index) => {
             step.classList.toggle('active', pattern[index]);
         });
@@ -1011,7 +1023,7 @@ class PO33Sampler {
 
     recordPadHit(padIndex) {
         // Record the pad hit to the current step position
-        this.sequencePatterns[padIndex][this.currentStep] = true;
+        this.sequencePatterns[this.currentBank][padIndex][this.currentStep] = true;
         
         // Update visual if this pad is currently selected in sequencer mode
         if (this.isSequencerMode && this.selectedPad === padIndex) {
@@ -1020,13 +1032,66 @@ class PO33Sampler {
                 step.classList.add('active');
             }
         }
+        
+        // Update bank indicators
+        this.updateBankIndicators();
     }
 
     clearPattern() {
         // Clear the pattern for the currently selected pad
-        this.sequencePatterns[this.selectedPad].fill(false);
+        this.sequencePatterns[this.currentBank][this.selectedPad].fill(false);
         document.querySelectorAll('.step').forEach(step => {
             step.classList.remove('active');
+        });
+        
+        // Update bank indicators
+        this.updateBankIndicators();
+    }
+
+    switchBank(bankIndex) {
+        if (bankIndex < 0 || bankIndex >= 4) return;
+        
+        this.currentBank = bankIndex;
+        
+        // Update bank selection UI
+        document.querySelectorAll('.bank-btn').forEach((btn, index) => {
+            btn.classList.toggle('active', index === bankIndex);
+        });
+        
+        // Reload the current pattern if in sequencer mode
+        if (this.isSequencerMode) {
+            this.loadSequencePattern();
+        }
+    }
+
+    copyPattern(fromBank, fromPad, toBank, toPad) {
+        // Copy pattern from one bank/pad to another
+        const sourcePattern = this.sequencePatterns[fromBank][fromPad];
+        this.sequencePatterns[toBank][toPad] = [...sourcePattern];
+        
+        // Update visual if we're viewing the destination
+        if (this.currentBank === toBank && this.selectedPad === toPad && this.isSequencerMode) {
+            this.loadSequencePattern();
+        }
+        
+        // Update bank indicators
+        this.updateBankIndicators();
+    }
+
+    updateBankIndicators() {
+        // Check each bank for patterns and update visual indicators
+        document.querySelectorAll('.bank-btn').forEach((btn, bankIndex) => {
+            let hasPatterns = false;
+            
+            // Check if any pad in this bank has any steps
+            for (let padIndex = 0; padIndex < 16; padIndex++) {
+                if (this.sequencePatterns[bankIndex][padIndex].some(step => step)) {
+                    hasPatterns = true;
+                    break;
+                }
+            }
+            
+            btn.classList.toggle('has-patterns', hasPatterns);
         });
     }
 

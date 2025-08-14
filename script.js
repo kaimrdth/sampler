@@ -22,6 +22,10 @@ class PO33Sampler {
         this.stepInterval = null;
         this.isRealtimeRecording = false;
         
+        // Metronome properties
+        this.metronomeEnabled = false;
+        this.metronomeSound = null;
+        
         // Track active audio sources for mono mode
         this.activeSources = new Array(16).fill(null);
         
@@ -58,6 +62,7 @@ class PO33Sampler {
         this.applyPadColors();
         this.setupMuteSoloControls();
         this.updateBankIndicators();
+        this.createMetronomeSound();
     }
 
     generateRandomPadColors() {
@@ -137,6 +142,7 @@ class PO33Sampler {
         document.getElementById('play-btn').addEventListener('click', () => this.togglePlay());
         document.getElementById('sequencer-btn').addEventListener('click', () => this.toggleSequencerMode());
         document.getElementById('edit-btn').addEventListener('click', () => this.toggleEditMode());
+        document.getElementById('metronome-btn').addEventListener('click', () => this.toggleMetronome());
         
         // Clear pattern button
         document.getElementById('clear-pattern-btn').addEventListener('click', () => this.clearPattern());
@@ -668,6 +674,11 @@ class PO33Sampler {
                 this.playSample(padIndex);
                 this.triggerPadGlow(padIndex);
             }
+        }
+
+        // Play metronome click if enabled
+        if (this.metronomeEnabled) {
+            this.playMetronomeClick();
         }
 
         this.currentStep = (this.currentStep + 1) % 16;
@@ -1624,6 +1635,60 @@ class PO33Sampler {
         this.soloedPads[padIndex] = !this.soloedPads[padIndex];
         const soloBtn = document.querySelector(`.solo-btn[data-pad="${padIndex}"]`);
         soloBtn.classList.toggle('active', this.soloedPads[padIndex]);
+    }
+
+    createMetronomeSound() {
+        if (!this.audioContext) return;
+        
+        // Create a short click sound buffer
+        const sampleRate = this.audioContext.sampleRate;
+        const duration = 0.1; // 100ms click
+        const bufferLength = sampleRate * duration;
+        
+        const buffer = this.audioContext.createBuffer(1, bufferLength, sampleRate);
+        const data = buffer.getChannelData(0);
+        
+        // Generate a short click sound (sine wave with quick decay)
+        for (let i = 0; i < bufferLength; i++) {
+            const t = i / sampleRate;
+            const frequency = 800; // 800Hz click
+            const envelope = Math.exp(-t * 20); // Quick decay
+            data[i] = Math.sin(2 * Math.PI * frequency * t) * envelope * 0.3;
+        }
+        
+        this.metronomeSound = buffer;
+    }
+
+    toggleMetronome() {
+        this.metronomeEnabled = !this.metronomeEnabled;
+        const metronomeBtn = document.getElementById('metronome-btn');
+        metronomeBtn.classList.toggle('active', this.metronomeEnabled);
+    }
+
+    playMetronomeClick() {
+        if (!this.metronomeSound || !this.audioContext) return;
+        
+        try {
+            // Ensure audio context is ready
+            if (this.audioContext.state === 'suspended') {
+                this.audioContext.resume();
+            }
+
+            const source = this.audioContext.createBufferSource();
+            const gainNode = this.audioContext.createGain();
+            
+            source.buffer = this.metronomeSound;
+            source.connect(gainNode);
+            gainNode.connect(this.audioContext.destination);
+            
+            // Different volume for downbeats (steps 0, 4, 8, 12)
+            const isDownbeat = this.currentStep % 4 === 0;
+            gainNode.gain.value = isDownbeat ? 0.5 : 0.3;
+            
+            source.start();
+        } catch (error) {
+            console.error('Metronome playback error:', error);
+        }
     }
 }
 

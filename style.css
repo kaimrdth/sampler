@@ -463,18 +463,18 @@ body {
 .slider-group input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 16px;
-    height: 8px;
-    background: #8b7355;
+    width: 12px;
+    height: 6px;
+    background: var(--edit-accent-color, #8b7355);
     border-radius: 2px;
     cursor: pointer;
     border: 1px solid #fefcf8;
 }
 
 .slider-group input[type="range"]::-moz-range-thumb {
-    width: 16px;
-    height: 8px;
-    background: #8b7355;
+    width: 12px;
+    height: 6px;
+    background: var(--edit-accent-color, #8b7355);
     border-radius: 2px;
     cursor: pointer;
     border: 1px solid #fefcf8;
@@ -525,7 +525,7 @@ body {
     appearance: none;
     width: 8px;
     height: 8px;
-    background: #8b7355;
+    background: var(--edit-accent-color, #8b7355);
     border-radius: 50%;
     cursor: pointer;
     border: 1px solid #fefcf8;
@@ -534,7 +534,7 @@ body {
 .knob-group input[type="range"]::-moz-range-thumb {
     width: 8px;
     height: 8px;
-    background: #8b7355;
+    background: var(--edit-accent-color, #8b7355);
     border-radius: 50%;
     cursor: pointer;
     border: 1px solid #fefcf8;
@@ -570,7 +570,7 @@ body {
 .filter-type input[type="radio"], .poly-mode input[type="radio"] {
     width: 8px;
     height: 8px;
-    accent-color: #8b7355;
+    accent-color: var(--edit-accent-color, #8b7355);
 }
 
 .visualizer {
@@ -626,7 +626,7 @@ body {
 .handle-line {
     width: 1px;
     height: 100%;
-    background: #8b7355;
+    background: var(--edit-accent-color, #8b7355);
     margin: 0 auto;
 }
 
@@ -634,11 +634,14 @@ body {
     position: absolute;
     top: -16px;
     font-size: 7px;
-    color: #8b7355;
     font-weight: 400;
     letter-spacing: 0.2px;
     text-transform: lowercase;
     white-space: nowrap;
+}
+
+.handle-grip {
+    color: var(--edit-accent-color, #8b7355);
 }
 
 .start-handle .handle-grip {

@@ -689,6 +689,10 @@ class PO33Sampler {
             pad.classList.toggle('active', index === this.editingPad);
         });
         
+        // Set the edit accent color to match the current pad
+        const editAccentColor = this.padColors[this.editingPad];
+        document.documentElement.style.setProperty('--edit-accent-color', editAccentColor);
+        
         // Update edit panel
         document.getElementById('edit-pad-number').textContent = String(this.editingPad + 1).padStart(2, '0');
         
@@ -805,7 +809,8 @@ class PO33Sampler {
         const amp = canvas.height / 2;
         
         ctx.beginPath();
-        ctx.strokeStyle = '#4a9eff';
+        const editAccentColor = getComputedStyle(document.documentElement).getPropertyValue('--edit-accent-color') || '#4a9eff';
+        ctx.strokeStyle = editAccentColor;
         ctx.lineWidth = 1;
         
         for (let i = 0; i < canvas.width; i++) {

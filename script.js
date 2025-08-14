@@ -22,6 +22,9 @@ class PO33Sampler {
         // Track active audio sources for mono mode
         this.activeSources = new Array(16).fill(null);
         
+        // Track pad hold state for looping
+        this.padHoldState = new Array(16).fill(false);
+        
         // Mute and Solo states
         this.mutedPads = new Array(16).fill(false);
         this.soloedPads = new Array(16).fill(false);
@@ -41,7 +44,8 @@ class PO33Sampler {
             filterRes: 1,
             trimStart: 0.0,  // Start position (0-1)
             trimEnd: 1.0,    // End position (0-1)
-            polyMode: 'poly' // 'poly' or 'mono'
+            polyMode: 'poly', // 'poly' or 'mono'
+            loopOnHold: false // Loop sample when pad is held down
         }));
         
         this.initializeAudio();
@@ -203,6 +207,9 @@ class PO33Sampler {
     handlePadPress(index) {
         const pad = document.querySelector(`[data-pad="${index}"]`);
         pad.classList.add('active');
+        
+        // Track pad hold state
+        this.padHoldState[index] = true;
 
         console.log('handlePadPress:', index);
         console.log('recordMode:', this.recordMode);
@@ -241,6 +248,19 @@ class PO33Sampler {
 
     handlePadRelease(index) {
         const pad = document.querySelector(`[data-pad="${index}"]`);
+        
+        // Track pad hold state
+        this.padHoldState[index] = false;
+        
+        // Stop looping audio source if it was looping
+        if (this.activeSources[index] && this.sampleParams[index].loopOnHold) {
+            try {
+                this.activeSources[index].stop();
+            } catch (e) {
+                // Source might already be stopped
+            }
+            this.activeSources[index] = null;
+        }
         
         // Don't remove active class if we're in edit mode and this is the editing pad
         // or if we're in sequencer mode and this is the selected pad
@@ -459,7 +479,7 @@ class PO33Sampler {
             const gainNode = this.audioContext.createGain();
             const filterNode = this.audioContext.createBiquadFilter();
             
-            // Set up source with trimming
+            // Set up source with trimming and looping
             source.buffer = this.samples[index];
             source.playbackRate.value = params.pitch;
             
@@ -468,6 +488,13 @@ class PO33Sampler {
             const trimStartTime = params.trimStart * sampleDuration;
             const trimEndTime = params.trimEnd * sampleDuration;
             const trimDuration = trimEndTime - trimStartTime;
+            
+            // Set up looping if enabled and pad is held
+            if (params.loopOnHold && this.padHoldState[index]) {
+                source.loop = true;
+                source.loopStart = trimStartTime;
+                source.loopEnd = trimEndTime;
+            }
             
             // Set up filter
             filterNode.type = params.filterType;
@@ -501,8 +528,8 @@ class PO33Sampler {
             gainNode.gain.setValueAtTime(0.8 * sustainLevel, sustainEnd);
             gainNode.gain.linearRampToValueAtTime(0, sustainEnd + releaseTime);
             
-            // Track source for mono mode
-            if (params.polyMode === 'mono') {
+            // Track source for mono mode or looping
+            if (params.polyMode === 'mono' || (params.loopOnHold && this.padHoldState[index])) {
                 this.activeSources[index] = source;
             }
 
@@ -514,11 +541,17 @@ class PO33Sampler {
             };
 
             // Start playback with trimming
-            source.start(currentTime, trimStartTime, trimDuration);
-            
-            // Stop source after envelope completes (or trim duration, whichever is shorter)
-            const totalDuration = Math.min(sustainEnd + releaseTime + 0.1 - currentTime, trimDuration);
-            source.stop(currentTime + totalDuration);
+            if (params.loopOnHold && this.padHoldState[index]) {
+                // For looping, start without duration limit and loop the trimmed section
+                source.start(currentTime, trimStartTime);
+            } else {
+                // For non-looping, use the existing logic with duration
+                source.start(currentTime, trimStartTime, trimDuration);
+                
+                // Stop source after envelope completes (or trim duration, whichever is shorter)
+                const totalDuration = Math.min(sustainEnd + releaseTime + 0.1 - currentTime, trimDuration);
+                source.stop(currentTime + totalDuration);
+            }
             
             console.log('Sample playing with effects successfully');
         } catch (error) {
@@ -701,30 +734,11 @@ class PO33Sampler {
     }
 
     setupEditControls() {
-        // ADSR controls
-        document.getElementById('attack-knob').addEventListener('input', (e) => {
-            const value = parseFloat(e.target.value);
-            this.sampleParams[this.editingPad].attack = value;
-            document.getElementById('attack-value').textContent = value.toFixed(2);
-        });
-        
-        document.getElementById('decay-knob').addEventListener('input', (e) => {
-            const value = parseFloat(e.target.value);
-            this.sampleParams[this.editingPad].decay = value;
-            document.getElementById('decay-value').textContent = value.toFixed(2);
-        });
-        
-        document.getElementById('sustain-knob').addEventListener('input', (e) => {
-            const value = parseFloat(e.target.value);
-            this.sampleParams[this.editingPad].sustain = value;
-            document.getElementById('sustain-value').textContent = value.toFixed(2);
-        });
-        
-        document.getElementById('release-knob').addEventListener('input', (e) => {
-            const value = parseFloat(e.target.value);
-            this.sampleParams[this.editingPad].release = value;
-            document.getElementById('release-value').textContent = value.toFixed(2);
-        });
+        // ADSR controls with mobile drag support
+        this.setupADSRControl('attack', 0, 10, 0.01);
+        this.setupADSRControl('decay', 0, 10, 0.01);
+        this.setupADSRControl('sustain', 0, 1, 0.01);
+        this.setupADSRControl('release', 0, 10, 0.01);
 
         // Pitch control
         document.getElementById('pitch-knob').addEventListener('input', (e) => {
@@ -757,6 +771,11 @@ class PO33Sampler {
             document.getElementById('filter-res-value').textContent = e.target.value;
         });
 
+        // Loop toggle control
+        document.getElementById('loop-toggle').addEventListener('change', (e) => {
+            this.sampleParams[this.editingPad].loopOnHold = e.target.checked;
+        });
+
     }
 
     loadEditParams() {
@@ -786,6 +805,9 @@ class PO33Sampler {
         
         // Load poly mode
         document.querySelector(`input[name="poly-mode"][value="${params.polyMode}"]`).checked = true;
+        
+        // Load loop toggle state
+        document.getElementById('loop-toggle').checked = params.loopOnHold;
     }
 
     drawWaveform() {
@@ -1169,6 +1191,106 @@ class PO33Sampler {
             }
             lastTap = currentTime;
         });
+    }
+
+    setupADSRControl(paramName, min, max, step) {
+        const knob = document.getElementById(`${paramName}-knob`);
+        const valueDisplay = document.getElementById(`${paramName}-value`);
+        
+        let isDragging = false;
+        let startY = 0;
+        let startValue = 0;
+        let changeTimeout = null;
+        let isAdjusting = false;
+
+        // Regular input change handler
+        knob.addEventListener('input', (e) => {
+            if (!isDragging) {
+                const value = parseFloat(e.target.value);
+                this.sampleParams[this.editingPad][paramName] = value;
+                valueDisplay.textContent = value.toFixed(2);
+            }
+        });
+
+        // Enhanced gesture handling for mobile and desktop
+        const startAdjustment = (clientY) => {
+            isDragging = true;
+            isAdjusting = true;
+            startY = clientY;
+            startValue = parseFloat(knob.value);
+            knob.classList.add('adjusting');
+            
+            // Haptic feedback on mobile
+            if (navigator.vibrate) {
+                navigator.vibrate(5);
+            }
+        };
+
+        const updateValue = (clientY) => {
+            if (!isDragging) return;
+            
+            const deltaY = startY - clientY;
+            const sensitivity = window.innerWidth < 768 ? 0.01 : 0.02; // More sensitive on mobile
+            const range = max - min;
+            const valueChange = deltaY * sensitivity * range;
+            const newValue = Math.max(min, Math.min(max, startValue + valueChange));
+            
+            if (Math.abs(newValue - parseFloat(knob.value)) > step / 2) {
+                knob.value = newValue;
+                this.sampleParams[this.editingPad][paramName] = newValue;
+                valueDisplay.textContent = newValue.toFixed(2);
+                
+                // Subtle haptic feedback during adjustment
+                if (navigator.vibrate && Math.abs(newValue - startValue) > range * 0.05) {
+                    navigator.vibrate(2);
+                }
+
+                // Visual pulse effect
+                knob.classList.add('pulse');
+                clearTimeout(changeTimeout);
+                changeTimeout = setTimeout(() => {
+                    knob.classList.remove('pulse');
+                }, 100);
+            }
+        };
+
+        const endAdjustment = () => {
+            if (!isDragging) return;
+            
+            isDragging = false;
+            knob.classList.remove('adjusting');
+            
+            setTimeout(() => {
+                isAdjusting = false;
+            }, 150);
+        };
+
+        // Mouse events for desktop
+        knob.addEventListener('mousedown', (e) => {
+            startAdjustment(e.clientY);
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            updateValue(e.clientY);
+        });
+
+        document.addEventListener('mouseup', endAdjustment);
+
+        // Touch events for mobile
+        knob.addEventListener('touchstart', (e) => {
+            startAdjustment(e.touches[0].clientY);
+            e.preventDefault();
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (isDragging) {
+                updateValue(e.touches[0].clientY);
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('touchend', endAdjustment);
     }
 
     setupMuteSoloControls() {

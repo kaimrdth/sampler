@@ -782,15 +782,31 @@ class PO33Sampler {
     loadEditParams() {
         const params = this.sampleParams[this.editingPad];
         
-        // Load ADSR values
+        // Load ADSR values and update visual rotation
+        const updateKnobRotation = (paramName, value, min, max) => {
+            const indicator = document.getElementById(`${paramName}-indicator`);
+            if (indicator) {
+                const normalizedValue = (value - min) / (max - min);
+                const rotationAngle = -135 + (normalizedValue * 270);
+                indicator.style.transform = `translateX(-50%) rotate(${rotationAngle}deg)`;
+            }
+        };
+        
         document.getElementById('attack-knob').value = params.attack;
         document.getElementById('attack-value').textContent = params.attack.toFixed(2);
+        updateKnobRotation('attack', params.attack, 0, 10);
+        
         document.getElementById('decay-knob').value = params.decay;
         document.getElementById('decay-value').textContent = params.decay.toFixed(2);
+        updateKnobRotation('decay', params.decay, 0, 10);
+        
         document.getElementById('sustain-knob').value = params.sustain;
         document.getElementById('sustain-value').textContent = params.sustain.toFixed(2);
+        updateKnobRotation('sustain', params.sustain, 0, 1);
+        
         document.getElementById('release-knob').value = params.release;
         document.getElementById('release-value').textContent = params.release.toFixed(2);
+        updateKnobRotation('release', params.release, 0, 10);
         
         // Load pitch value
         document.getElementById('pitch-knob').value = params.pitch;
@@ -1196,6 +1212,8 @@ class PO33Sampler {
 
     setupADSRControl(paramName, min, max, step) {
         const knob = document.getElementById(`${paramName}-knob`);
+        const knobContainer = document.getElementById(`${paramName}-knob-container`);
+        const indicator = document.getElementById(`${paramName}-indicator`);
         const valueDisplay = document.getElementById(`${paramName}-value`);
         
         let isDragging = false;
@@ -1204,12 +1222,21 @@ class PO33Sampler {
         let changeTimeout = null;
         let isAdjusting = false;
 
+        // Update knob visual rotation based on value
+        const updateKnobRotation = (value) => {
+            // Map value to rotation angle (-135deg to +135deg, 270 degrees total)
+            const normalizedValue = (value - min) / (max - min);
+            const rotationAngle = -135 + (normalizedValue * 270);
+            indicator.style.transform = `translateX(-50%) rotate(${rotationAngle}deg)`;
+        };
+
         // Regular input change handler
         knob.addEventListener('input', (e) => {
             if (!isDragging) {
                 const value = parseFloat(e.target.value);
                 this.sampleParams[this.editingPad][paramName] = value;
                 valueDisplay.textContent = value.toFixed(2);
+                updateKnobRotation(value);
             }
         });
 
@@ -1219,7 +1246,7 @@ class PO33Sampler {
             isAdjusting = true;
             startY = clientY;
             startValue = parseFloat(knob.value);
-            knob.classList.add('adjusting');
+            knobContainer.classList.add('adjusting');
             
             // Haptic feedback on mobile
             if (navigator.vibrate) {
@@ -1240,6 +1267,7 @@ class PO33Sampler {
                 knob.value = newValue;
                 this.sampleParams[this.editingPad][paramName] = newValue;
                 valueDisplay.textContent = newValue.toFixed(2);
+                updateKnobRotation(newValue);
                 
                 // Subtle haptic feedback during adjustment
                 if (navigator.vibrate && Math.abs(newValue - startValue) > range * 0.05) {
@@ -1247,10 +1275,10 @@ class PO33Sampler {
                 }
 
                 // Visual pulse effect
-                knob.classList.add('pulse');
+                knobContainer.classList.add('pulse');
                 clearTimeout(changeTimeout);
                 changeTimeout = setTimeout(() => {
-                    knob.classList.remove('pulse');
+                    knobContainer.classList.remove('pulse');
                 }, 100);
             }
         };
@@ -1259,15 +1287,15 @@ class PO33Sampler {
             if (!isDragging) return;
             
             isDragging = false;
-            knob.classList.remove('adjusting');
+            knobContainer.classList.remove('adjusting');
             
             setTimeout(() => {
                 isAdjusting = false;
             }, 150);
         };
 
-        // Mouse events for desktop
-        knob.addEventListener('mousedown', (e) => {
+        // Mouse events for desktop - attach to knob container
+        knobContainer.addEventListener('mousedown', (e) => {
             startAdjustment(e.clientY);
             e.preventDefault();
         });
@@ -1278,8 +1306,8 @@ class PO33Sampler {
 
         document.addEventListener('mouseup', endAdjustment);
 
-        // Touch events for mobile
-        knob.addEventListener('touchstart', (e) => {
+        // Touch events for mobile - attach to knob container
+        knobContainer.addEventListener('touchstart', (e) => {
             startAdjustment(e.touches[0].clientY);
             e.preventDefault();
         });
@@ -1292,6 +1320,9 @@ class PO33Sampler {
         });
 
         document.addEventListener('touchend', endAdjustment);
+
+        // Initialize knob rotation
+        updateKnobRotation(parseFloat(knob.value));
     }
 
     setupMuteSoloControls() {

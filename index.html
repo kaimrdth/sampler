@@ -185,26 +185,42 @@
             <div class="edit-sections">
                 <div class="edit-section envelope">
                     <h4>envelope</h4>
-                    <div class="slider-row">
-                        <div class="slider-group">
+                    <div class="knob-row adsr-knobs">
+                        <div class="radial-knob-group">
                             <label>a</label>
-                            <input type="range" id="attack-knob" min="0" max="10" step="0.01" value="0.01">
-                            <span class="slider-value" id="attack-value">0.01</span>
+                            <div class="radial-knob" id="attack-knob-container">
+                                <div class="knob-track"></div>
+                                <div class="knob-indicator" id="attack-indicator"></div>
+                                <input type="range" id="attack-knob" min="0" max="10" step="0.01" value="0.01" class="hidden-range">
+                            </div>
+                            <span class="knob-value" id="attack-value">0.01</span>
                         </div>
-                        <div class="slider-group">
+                        <div class="radial-knob-group">
                             <label>d</label>
-                            <input type="range" id="decay-knob" min="0" max="10" step="0.01" value="7.0">
-                            <span class="slider-value" id="decay-value">7.00</span>
+                            <div class="radial-knob" id="decay-knob-container">
+                                <div class="knob-track"></div>
+                                <div class="knob-indicator" id="decay-indicator"></div>
+                                <input type="range" id="decay-knob" min="0" max="10" step="0.01" value="7.0" class="hidden-range">
+                            </div>
+                            <span class="knob-value" id="decay-value">7.00</span>
                         </div>
-                        <div class="slider-group">
+                        <div class="radial-knob-group">
                             <label>s</label>
-                            <input type="range" id="sustain-knob" min="0" max="1" step="0.01" value="0.8">
-                            <span class="slider-value" id="sustain-value">0.80</span>
+                            <div class="radial-knob" id="sustain-knob-container">
+                                <div class="knob-track"></div>
+                                <div class="knob-indicator" id="sustain-indicator"></div>
+                                <input type="range" id="sustain-knob" min="0" max="1" step="0.01" value="0.8" class="hidden-range">
+                            </div>
+                            <span class="knob-value" id="sustain-value">0.80</span>
                         </div>
-                        <div class="slider-group">
+                        <div class="radial-knob-group">
                             <label>r</label>
-                            <input type="range" id="release-knob" min="0" max="10" step="0.01" value="8.0">
-                            <span class="slider-value" id="release-value">8.00</span>
+                            <div class="radial-knob" id="release-knob-container">
+                                <div class="knob-track"></div>
+                                <div class="knob-indicator" id="release-indicator"></div>
+                                <input type="range" id="release-knob" min="0" max="10" step="0.01" value="8.0" class="hidden-range">
+                            </div>
+                            <span class="knob-value" id="release-value">8.00</span>
                         </div>
                     </div>
                 </div>

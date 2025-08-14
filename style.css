@@ -484,6 +484,7 @@ body {
     padding-bottom: 8px;
 }
 
+/* Legacy slider styles - kept for compatibility */
 .slider-row {
     display: flex;
     gap: 8px;
@@ -544,6 +545,88 @@ body {
     font-size: 9px;
     color: #e8e8e8;
     margin-top: 4px;
+    font-weight: 400;
+    letter-spacing: 0.2px;
+}
+
+/* Radial Knob Styles */
+.adsr-knobs {
+    gap: 12px;
+    height: 80px;
+    align-items: center;
+}
+
+.radial-knob-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 48px;
+}
+
+.radial-knob-group label {
+    font-size: 11px;
+    color: #ccc;
+    margin-bottom: 8px;
+    text-transform: lowercase;
+    letter-spacing: 0.3px;
+}
+
+.radial-knob {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.knob-track {
+    width: 100%;
+    height: 100%;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.3);
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.knob-indicator {
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    width: 2px;
+    height: 12px;
+    background: var(--edit-accent-color, #8b7355);
+    border-radius: 1px;
+    transform-origin: 50% 16px;
+    transform: translateX(-50%) rotate(-135deg);
+    transition: transform 0.1s ease;
+}
+
+.hidden-range {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.radial-knob:hover .knob-track {
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.radial-knob.adjusting .knob-track {
+    border-color: var(--edit-accent-color, #8b7355);
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.radial-knob.pulse .knob-indicator {
+    filter: brightness(1.3);
+}
+
+.radial-knob-group .knob-value {
+    font-size: 9px;
+    color: #e8e8e8;
+    margin-top: 6px;
     font-weight: 400;
     letter-spacing: 0.2px;
 }

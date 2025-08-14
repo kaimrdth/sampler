@@ -707,6 +707,57 @@ body {
     color: #666;
 }
 
+.pad-controls {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    display: flex;
+    gap: 2px;
+    z-index: 10;
+}
+
+.mute-btn, .solo-btn {
+    width: 12px;
+    height: 12px;
+    border: none;
+    border-radius: 1px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 8px;
+    font-weight: 500;
+    line-height: 1;
+    transition: all 0.15s ease;
+    color: #fff;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mute-btn:hover, .solo-btn:hover {
+    transform: scale(1.1);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.mute-btn.active {
+    background: #3b82f6;
+    border-color: #3b82f6;
+    color: #fff;
+    box-shadow: 0 0 4px rgba(59, 130, 246, 0.4);
+}
+
+.solo-btn.active {
+    background: #f97316;
+    border-color: #f97316;
+    color: #fff;
+    box-shadow: 0 0 4px rgba(249, 115, 22, 0.4);
+}
+
+.mute-btn:active, .solo-btn:active {
+    transform: scale(0.95);
+}
+
 @media (max-width: 768px) {
     .container {
         padding: 20px;
@@ -724,5 +775,17 @@ body {
     .step {
         width: 20px;
         height: 20px;
+    }
+    
+    .pad-controls {
+        bottom: 2px;
+        right: 2px;
+        gap: 1px;
+    }
+    
+    .mute-btn, .solo-btn {
+        width: 10px;
+        height: 10px;
+        font-size: 7px;
     }
 }

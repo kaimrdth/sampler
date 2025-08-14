@@ -22,6 +22,10 @@ class PO33Sampler {
         // Track active audio sources for mono mode
         this.activeSources = new Array(16).fill(null);
         
+        // Mute and Solo states
+        this.mutedPads = new Array(16).fill(false);
+        this.soloedPads = new Array(16).fill(false);
+        
         // Pad colors (randomized on each load)
         this.padColors = this.generateRandomPadColors();
         
@@ -44,6 +48,7 @@ class PO33Sampler {
         this.setupEventListeners();
         this.updateTempo();
         this.applyPadColors();
+        this.setupMuteSoloControls();
     }
 
     generateRandomPadColors() {
@@ -422,7 +427,22 @@ class PO33Sampler {
     }
 
     async playSample(index) {
-        this.playSampleWithEffects(index);
+        if (this.shouldPadPlay(index)) {
+            this.playSampleWithEffects(index);
+        }
+    }
+
+    shouldPadPlay(index) {
+        // Check if any pads are soloed
+        const hasSoloedPads = this.soloedPads.some(solo => solo);
+        
+        if (hasSoloedPads) {
+            // If there are soloed pads, only play soloed pads
+            return this.soloedPads[index];
+        } else {
+            // If no pads are soloed, play unless muted
+            return !this.mutedPads[index];
+        }
     }
 
     async playSampleWithEffects(index) {
@@ -1065,6 +1085,38 @@ class PO33Sampler {
             console.error('Error loading audio file:', error);
             const status = document.getElementById('recording-status');
         }
+    }
+
+    setupMuteSoloControls() {
+        // Add event listeners for all mute buttons
+        document.querySelectorAll('.mute-btn').forEach((btn, index) => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.toggleMute(index);
+            });
+        });
+
+        // Add event listeners for all solo buttons
+        document.querySelectorAll('.solo-btn').forEach((btn, index) => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.toggleSolo(index);
+            });
+        });
+    }
+
+    toggleMute(padIndex) {
+        this.mutedPads[padIndex] = !this.mutedPads[padIndex];
+        const muteBtn = document.querySelector(`.mute-btn[data-pad="${padIndex}"]`);
+        muteBtn.classList.toggle('active', this.mutedPads[padIndex]);
+    }
+
+    toggleSolo(padIndex) {
+        this.soloedPads[padIndex] = !this.soloedPads[padIndex];
+        const soloBtn = document.querySelector(`.solo-btn[data-pad="${padIndex}"]`);
+        soloBtn.classList.toggle('active', this.soloedPads[padIndex]);
     }
 }
 

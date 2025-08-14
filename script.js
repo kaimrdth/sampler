@@ -156,35 +156,8 @@ class PO33Sampler {
             step.addEventListener('click', () => this.toggleStep(index));
         });
 
-        // Tempo drag control
-        const tempoControl = document.querySelector('.tempo-control-header');
-        let isDraggingTempo = false;
-        let tempoStartY = 0;
-        let tempoStartValue = 120;
-        
-        tempoControl.addEventListener('mousedown', (e) => {
-            isDraggingTempo = true;
-            tempoStartY = e.clientY;
-            tempoStartValue = this.tempo;
-            e.preventDefault();
-        });
-        
-        document.addEventListener('mousemove', (e) => {
-            if (!isDraggingTempo) return;
-            
-            const deltaY = tempoStartY - e.clientY; // Inverted: up = increase
-            const tempoChange = Math.round(deltaY * 0.5); // 0.5 BPM per pixel
-            const newTempo = Math.max(60, Math.min(200, tempoStartValue + tempoChange));
-            
-            if (newTempo !== this.tempo) {
-                this.tempo = newTempo;
-                this.updateTempo();
-            }
-        });
-        
-        document.addEventListener('mouseup', () => {
-            isDraggingTempo = false;
-        });
+        // Enhanced tempo control with mobile-friendly gestures
+        this.setupTempoControl();
 
         document.addEventListener('keydown', (e) => this.handleKeyPress(e));
         document.addEventListener('keyup', (e) => this.handleKeyRelease(e));
@@ -1085,6 +1058,117 @@ class PO33Sampler {
             console.error('Error loading audio file:', error);
             const status = document.getElementById('recording-status');
         }
+    }
+
+    setupTempoControl() {
+        const tempoControl = document.querySelector('.tempo-control-header');
+        let isDraggingTempo = false;
+        let tempoStartY = 0;
+        let tempoStartValue = 120;
+        let tempoChangeTimeout = null;
+        let isTempoAdjusting = false;
+
+        // Enhanced gesture handling for mobile and desktop
+        const startTempoAdjustment = (clientY) => {
+            isDraggingTempo = true;
+            isTempoAdjusting = true;
+            tempoStartY = clientY;
+            tempoStartValue = this.tempo;
+            tempoControl.classList.add('tempo-adjusting');
+            
+            // Haptic feedback on mobile
+            if (navigator.vibrate) {
+                navigator.vibrate(5);
+            }
+        };
+
+        const updateTempo = (clientY) => {
+            if (!isDraggingTempo) return;
+            
+            const deltaY = tempoStartY - clientY;
+            const sensitivity = window.innerWidth < 768 ? 0.3 : 0.5; // More sensitive on mobile
+            const tempoChange = Math.round(deltaY * sensitivity);
+            const newTempo = Math.max(60, Math.min(200, tempoStartValue + tempoChange));
+            
+            if (newTempo !== this.tempo) {
+                this.tempo = newTempo;
+                this.updateTempo();
+                
+                // Subtle haptic feedback during adjustment
+                if (navigator.vibrate && Math.abs(newTempo - tempoStartValue) % 5 === 0) {
+                    navigator.vibrate(3);
+                }
+
+                // Visual pulse effect
+                tempoControl.classList.add('tempo-pulse');
+                clearTimeout(tempoChangeTimeout);
+                tempoChangeTimeout = setTimeout(() => {
+                    tempoControl.classList.remove('tempo-pulse');
+                }, 100);
+            }
+        };
+
+        const endTempoAdjustment = () => {
+            if (!isDraggingTempo) return;
+            
+            isDraggingTempo = false;
+            tempoControl.classList.remove('tempo-adjusting');
+            
+            setTimeout(() => {
+                isTempoAdjusting = false;
+            }, 150);
+        };
+
+        // Mouse events
+        tempoControl.addEventListener('mousedown', (e) => {
+            startTempoAdjustment(e.clientY);
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            updateTempo(e.clientY);
+        });
+
+        document.addEventListener('mouseup', endTempoAdjustment);
+
+        // Touch events for mobile
+        tempoControl.addEventListener('touchstart', (e) => {
+            startTempoAdjustment(e.touches[0].clientY);
+            e.preventDefault();
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (isDraggingTempo) {
+                updateTempo(e.touches[0].clientY);
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('touchend', (e) => {
+            endTempoAdjustment();
+        });
+
+        // Double tap for quick tempo reset to 120
+        let lastTap = 0;
+        tempoControl.addEventListener('touchend', (e) => {
+            const currentTime = new Date().getTime();
+            const tapLength = currentTime - lastTap;
+            
+            if (tapLength < 300 && tapLength > 0 && !isTempoAdjusting) {
+                this.tempo = 120;
+                this.updateTempo();
+                tempoControl.classList.add('tempo-reset');
+                
+                if (navigator.vibrate) {
+                    navigator.vibrate([10, 50, 10]);
+                }
+                
+                setTimeout(() => {
+                    tempoControl.classList.remove('tempo-reset');
+                }, 300);
+            }
+            lastTap = currentTime;
+        });
     }
 
     setupMuteSoloControls() {

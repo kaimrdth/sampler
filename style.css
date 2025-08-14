@@ -78,6 +78,63 @@ body {
     background: #808080;
 }
 
+/* Enhanced tempo control visual feedback */
+.tempo-control-header.tempo-adjusting {
+    background: #909090;
+    box-shadow: 
+        0 2px 8px rgba(139, 115, 85, 0.2),
+        inset 0 1px 2px rgba(0, 0, 0, 0.1);
+    transform: scale(1.02);
+}
+
+.tempo-control-header.tempo-pulse {
+    animation: tempo-pulse 0.1s ease-out;
+}
+
+.tempo-control-header.tempo-reset {
+    animation: tempo-reset 0.3s ease-out;
+}
+
+@keyframes tempo-pulse {
+    0% { 
+        background: #909090;
+        transform: scale(1.02);
+    }
+    50% { 
+        background: #a0a0a0;
+        transform: scale(1.05);
+        box-shadow: 
+            0 3px 12px rgba(139, 115, 85, 0.3),
+            inset 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+    100% { 
+        background: #909090;
+        transform: scale(1.02);
+    }
+}
+
+@keyframes tempo-reset {
+    0% { 
+        background: #909090;
+        transform: scale(1.02);
+    }
+    25% { 
+        background: #8b7355;
+        transform: scale(1.08);
+        box-shadow: 
+            0 4px 16px rgba(139, 115, 85, 0.4),
+            inset 0 1px 2px rgba(255, 255, 255, 0.1);
+    }
+    75% {
+        background: #8b7355;
+        transform: scale(1.04);
+    }
+    100% { 
+        background: #707070;
+        transform: scale(1);
+    }
+}
+
 .tempo-control-header #tempo-display {
     font-weight: 500;
 }
@@ -787,5 +844,39 @@ body {
         width: 14px;
         height: 14px;
         font-size: 9px;
+    }
+    
+    /* Mobile-specific tempo control enhancements */
+    .tempo-control-header {
+        padding: 10px 16px;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+    }
+    
+    .tempo-control-header.tempo-adjusting {
+        transform: scale(1.05);
+        box-shadow: 
+            0 3px 12px rgba(139, 115, 85, 0.3),
+            inset 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* Enhanced mobile gesture feedback */
+    .tempo-control-header::after {
+        content: '↕';
+        position: absolute;
+        right: -20px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.4);
+        opacity: 0;
+        transition: opacity 0.2s ease;
+    }
+    
+    .tempo-control-header.tempo-adjusting::after {
+        opacity: 1;
+        color: rgba(139, 115, 85, 0.8);
     }
 }

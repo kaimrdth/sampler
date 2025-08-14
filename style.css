@@ -551,7 +551,7 @@ body {
 
 /* Radial Knob Styles */
 .adsr-knobs {
-    gap: 12px;
+    gap: 8px;
     height: 80px;
     align-items: center;
 }
@@ -560,7 +560,7 @@ body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    min-width: 48px;
+    min-width: 40px;
 }
 
 .radial-knob-group label {
@@ -573,8 +573,8 @@ body {
 
 .radial-knob {
     position: relative;
-    width: 36px;
-    height: 36px;
+    width: 28px;
+    height: 28px;
     cursor: pointer;
     user-select: none;
 }
@@ -595,10 +595,10 @@ body {
     top: 2px;
     left: 50%;
     width: 2px;
-    height: 12px;
+    height: 9px;
     background: var(--edit-accent-color, #8b7355);
     border-radius: 1px;
-    transform-origin: 50% 16px;
+    transform-origin: 50% 12px;
     transform: translateX(-50%) rotate(-135deg);
     transition: transform 0.1s ease;
 }

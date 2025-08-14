@@ -740,12 +740,8 @@ class PO33Sampler {
         this.setupADSRControl('sustain', 0, 1, 0.01);
         this.setupADSRControl('release', 0, 10, 0.01);
 
-        // Pitch control
-        document.getElementById('pitch-knob').addEventListener('input', (e) => {
-            this.sampleParams[this.editingPad].pitch = parseFloat(e.target.value);
-            const semitones = Math.round(12 * Math.log2(e.target.value));
-            document.getElementById('pitch-value').textContent = semitones > 0 ? `+${semitones}` : semitones.toString();
-        });
+        // Pitch control - setup as radial knob
+        this.setupRadialKnob('pitch', 0.5, 2, 0.01);
 
         // Filter controls
         document.querySelectorAll('input[name="filter-type"]').forEach(radio => {
@@ -761,15 +757,9 @@ class PO33Sampler {
             });
         });
         
-        document.getElementById('filter-freq-knob').addEventListener('input', (e) => {
-            this.sampleParams[this.editingPad].filterFreq = parseFloat(e.target.value);
-            document.getElementById('filter-freq-value').textContent = e.target.value;
-        });
-        
-        document.getElementById('filter-res-knob').addEventListener('input', (e) => {
-            this.sampleParams[this.editingPad].filterRes = parseFloat(e.target.value);
-            document.getElementById('filter-res-value').textContent = e.target.value;
-        });
+        // Filter controls - setup as radial knobs
+        this.setupRadialKnob('filter-freq', 80, 8000, 10);
+        this.setupRadialKnob('filter-res', 0.1, 20, 0.1);
 
         // Loop toggle control
         document.getElementById('loop-toggle').addEventListener('click', (e) => {
@@ -808,17 +798,45 @@ class PO33Sampler {
         document.getElementById('release-value').textContent = params.release.toFixed(2);
         updateKnobRotation('release', params.release, 0, 10);
         
-        // Load pitch value
+        // Load pitch value and update visual rotation
         document.getElementById('pitch-knob').value = params.pitch;
         const semitones = Math.round(12 * Math.log2(params.pitch));
         document.getElementById('pitch-value').textContent = semitones > 0 ? `+${semitones}` : semitones.toString();
+        const updatePitchKnobRotation = (value, min, max) => {
+            const indicator = document.getElementById('pitch-indicator');
+            if (indicator) {
+                const normalizedValue = (value - min) / (max - min);
+                const rotationAngle = -135 + (normalizedValue * 270);
+                indicator.style.transform = `translateX(-50%) rotate(${rotationAngle}deg)`;
+            }
+        };
+        updatePitchKnobRotation(params.pitch, 0.5, 2);
         
-        // Load filter values
+        // Load filter values and update visual rotations
         document.querySelector(`input[value="${params.filterType}"]`).checked = true;
         document.getElementById('filter-freq-knob').value = params.filterFreq;
         document.getElementById('filter-freq-value').textContent = params.filterFreq;
+        const updateFilterFreqKnobRotation = (value, min, max) => {
+            const indicator = document.getElementById('filter-freq-indicator');
+            if (indicator) {
+                const normalizedValue = (value - min) / (max - min);
+                const rotationAngle = -135 + (normalizedValue * 270);
+                indicator.style.transform = `translateX(-50%) rotate(${rotationAngle}deg)`;
+            }
+        };
+        updateFilterFreqKnobRotation(params.filterFreq, 80, 8000);
+        
         document.getElementById('filter-res-knob').value = params.filterRes;
         document.getElementById('filter-res-value').textContent = params.filterRes.toFixed(1);
+        const updateFilterResKnobRotation = (value, min, max) => {
+            const indicator = document.getElementById('filter-res-indicator');
+            if (indicator) {
+                const normalizedValue = (value - min) / (max - min);
+                const rotationAngle = -135 + (normalizedValue * 270);
+                indicator.style.transform = `translateX(-50%) rotate(${rotationAngle}deg)`;
+            }
+        };
+        updateFilterResKnobRotation(params.filterRes, 0.1, 20);
         
         // Load poly mode
         document.querySelector(`input[name="poly-mode"][value="${params.polyMode}"]`).checked = true;
@@ -1267,6 +1285,147 @@ class PO33Sampler {
                 knob.value = newValue;
                 this.sampleParams[this.editingPad][paramName] = newValue;
                 valueDisplay.textContent = newValue.toFixed(2);
+                updateKnobRotation(newValue);
+                
+                // Subtle haptic feedback during adjustment
+                if (navigator.vibrate && Math.abs(newValue - startValue) > range * 0.05) {
+                    navigator.vibrate(2);
+                }
+
+                // Visual pulse effect
+                knobContainer.classList.add('pulse');
+                clearTimeout(changeTimeout);
+                changeTimeout = setTimeout(() => {
+                    knobContainer.classList.remove('pulse');
+                }, 100);
+            }
+        };
+
+        const endAdjustment = () => {
+            if (!isDragging) return;
+            
+            isDragging = false;
+            knobContainer.classList.remove('adjusting');
+            
+            setTimeout(() => {
+                isAdjusting = false;
+            }, 150);
+        };
+
+        // Mouse events for desktop - attach to knob container
+        knobContainer.addEventListener('mousedown', (e) => {
+            startAdjustment(e.clientY);
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            updateValue(e.clientY);
+        });
+
+        document.addEventListener('mouseup', endAdjustment);
+
+        // Touch events for mobile - attach to knob container
+        knobContainer.addEventListener('touchstart', (e) => {
+            startAdjustment(e.touches[0].clientY);
+            e.preventDefault();
+        });
+
+        document.addEventListener('touchmove', (e) => {
+            if (isDragging) {
+                updateValue(e.touches[0].clientY);
+                e.preventDefault();
+            }
+        });
+
+        document.addEventListener('touchend', endAdjustment);
+
+        // Initialize knob rotation
+        updateKnobRotation(parseFloat(knob.value));
+    }
+
+    setupRadialKnob(paramName, min, max, step) {
+        const knob = document.getElementById(`${paramName}-knob`);
+        const knobContainer = document.getElementById(`${paramName}-knob-container`);
+        const indicator = document.getElementById(`${paramName}-indicator`);
+        const valueDisplay = document.getElementById(`${paramName}-value`);
+        
+        let isDragging = false;
+        let startY = 0;
+        let startValue = 0;
+        let changeTimeout = null;
+        let isAdjusting = false;
+
+        // Update knob visual rotation based on value
+        const updateKnobRotation = (value) => {
+            // Map value to rotation angle (-135deg to +135deg, 270 degrees total)
+            const normalizedValue = (value - min) / (max - min);
+            const rotationAngle = -135 + (normalizedValue * 270);
+            indicator.style.transform = `translateX(-50%) rotate(${rotationAngle}deg)`;
+        };
+
+        // Update value display based on parameter type
+        const updateValueDisplay = (value) => {
+            if (paramName === 'pitch') {
+                const semitones = Math.round(12 * Math.log2(value));
+                valueDisplay.textContent = semitones > 0 ? `+${semitones}` : semitones.toString();
+            } else if (paramName === 'filter-freq') {
+                valueDisplay.textContent = Math.round(value).toString();
+            } else if (paramName === 'filter-res') {
+                valueDisplay.textContent = value.toFixed(1);
+            } else {
+                valueDisplay.textContent = value.toFixed(2);
+            }
+        };
+
+        // Regular input change handler
+        knob.addEventListener('input', (e) => {
+            if (!isDragging) {
+                const value = parseFloat(e.target.value);
+                if (paramName === 'pitch') {
+                    this.sampleParams[this.editingPad].pitch = value;
+                } else if (paramName === 'filter-freq') {
+                    this.sampleParams[this.editingPad].filterFreq = value;
+                } else if (paramName === 'filter-res') {
+                    this.sampleParams[this.editingPad].filterRes = value;
+                }
+                updateValueDisplay(value);
+                updateKnobRotation(value);
+            }
+        });
+
+        // Enhanced gesture handling for mobile and desktop
+        const startAdjustment = (clientY) => {
+            isDragging = true;
+            isAdjusting = true;
+            startY = clientY;
+            startValue = parseFloat(knob.value);
+            knobContainer.classList.add('adjusting');
+            
+            // Haptic feedback on mobile
+            if (navigator.vibrate) {
+                navigator.vibrate(5);
+            }
+        };
+
+        const updateValue = (clientY) => {
+            if (!isDragging) return;
+            
+            const deltaY = startY - clientY;
+            const sensitivity = window.innerWidth < 768 ? 0.01 : 0.02; // More sensitive on mobile
+            const range = max - min;
+            const valueChange = deltaY * sensitivity * range;
+            const newValue = Math.max(min, Math.min(max, startValue + valueChange));
+            
+            if (Math.abs(newValue - parseFloat(knob.value)) > step / 2) {
+                knob.value = newValue;
+                if (paramName === 'pitch') {
+                    this.sampleParams[this.editingPad].pitch = newValue;
+                } else if (paramName === 'filter-freq') {
+                    this.sampleParams[this.editingPad].filterFreq = newValue;
+                } else if (paramName === 'filter-res') {
+                    this.sampleParams[this.editingPad].filterRes = newValue;
+                }
+                updateValueDisplay(newValue);
                 updateKnobRotation(newValue);
                 
                 // Subtle haptic feedback during adjustment

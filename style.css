@@ -453,6 +453,7 @@ body {
 .slider-group input[type="range"] {
     writing-mode: bt-lr;
     -webkit-appearance: slider-vertical;
+    appearance: none;
     width: 20px;
     height: 60px;
     background: rgba(255, 255, 255, 0.1);
@@ -465,20 +466,21 @@ body {
     appearance: none;
     width: 12px;
     height: 6px;
-    background: var(--edit-accent-color, #8b7355);
+    background: var(--edit-accent-color, #8b7355) !important;
     border-radius: 2px;
     cursor: pointer;
-    border: 1px solid #fefcf8;
+    border: 1px solid #fefcf8 !important;
 }
 
 .slider-group input[type="range"]::-moz-range-thumb {
     width: 12px;
     height: 6px;
-    background: var(--edit-accent-color, #8b7355);
+    background: var(--edit-accent-color, #8b7355) !important;
     border-radius: 2px;
     cursor: pointer;
-    border: 1px solid #fefcf8;
+    border: 1px solid #fefcf8 !important;
     box-sizing: border-box;
+    -moz-appearance: none;
 }
 
 .slider-value {
@@ -525,20 +527,38 @@ body {
     appearance: none;
     width: 8px;
     height: 8px;
-    background: var(--edit-accent-color, #8b7355);
+    background: var(--edit-accent-color, #8b7355) !important;
     border-radius: 50%;
     cursor: pointer;
-    border: 1px solid #fefcf8;
+    border: 1px solid #fefcf8 !important;
 }
 
 .knob-group input[type="range"]::-moz-range-thumb {
     width: 8px;
     height: 8px;
-    background: var(--edit-accent-color, #8b7355);
+    background: var(--edit-accent-color, #8b7355) !important;
     border-radius: 50%;
     cursor: pointer;
-    border: 1px solid #fefcf8;
+    border: 1px solid #fefcf8 !important;
     box-sizing: border-box;
+    -moz-appearance: none;
+}
+
+/* Additional range slider styling for better browser support */
+.slider-group input[type="range"]::-ms-thumb,
+.knob-group input[type="range"]::-ms-thumb {
+    background: var(--edit-accent-color, #8b7355) !important;
+    border: 1px solid #fefcf8 !important;
+}
+
+.slider-group input[type="range"]::-webkit-slider-track,
+.knob-group input[type="range"]::-webkit-slider-track {
+    background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Force accent color override */
+.edit-controls input[type="range"] {
+    accent-color: var(--edit-accent-color, #8b7355) !important;
 }
 
 .knob-value {

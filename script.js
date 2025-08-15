@@ -19,6 +19,7 @@ class PO33Sampler {
         this.currentBank = 0;
         this.selectedPad = 0;
         this.tempo = 120;
+        this.globalSwing = 0;  // Global swing amount (0-100)
         this.stepInterval = null;
         this.isRealtimeRecording = false;
         
@@ -55,7 +56,8 @@ class PO33Sampler {
             trimEnd: 1.0,    // End position (0-1)
             polyMode: 'poly', // 'poly' or 'mono'
             loopOnHold: false, // Loop sample when pad is held down
-            oneShotMode: true  // ONE-SHOT mode (bypasses ADSR), default true
+            oneShotMode: true,  // ONE-SHOT mode (bypasses ADSR), default true
+            swing: 0         // Pad-specific swing amount (0-100)
         }));
         
         // Waveform zoom state (per pad)
@@ -790,15 +792,35 @@ class PO33Sampler {
             currentStepElement.classList.add('current');
         }
 
-        // Play all pads that have this step enabled
-        for (let padIndex = 0; padIndex < 16; padIndex++) {
-            if (this.sequencePatterns[this.currentBank][padIndex][this.currentStep]) {
-                this.playSample(padIndex);
-                this.triggerPadGlow(padIndex);
-            }
+        // Calculate swing delay for off-beat steps (1, 3, 5, 7, 9, 11, 13, 15)
+        const isOffBeat = this.currentStep % 2 === 1;
+        let swingDelay = 0;
+        
+        if (isOffBeat) {
+            // Apply swing to off-beat steps
+            const stepTime = (60 / this.tempo) * 1000;
+            const maxSwingDelay = stepTime * 0.3; // Max 30% of step time
+            swingDelay = (this.globalSwing / 100) * maxSwingDelay;
         }
 
-        // Play metronome click if enabled
+        // Schedule sample playback with swing delay
+        setTimeout(() => {
+            // Play all pads that have this step enabled
+            for (let padIndex = 0; padIndex < 16; padIndex++) {
+                if (this.sequencePatterns[this.currentBank][padIndex][this.currentStep]) {
+                    // Apply pad-specific swing on top of global swing
+                    const padSwingDelay = isOffBeat ? 
+                        (this.sampleParams[padIndex].swing / 100) * ((60 / this.tempo) * 1000 * 0.3) : 0;
+                    
+                    setTimeout(() => {
+                        this.playSample(padIndex);
+                        this.triggerPadGlow(padIndex);
+                    }, padSwingDelay);
+                }
+            }
+        }, swingDelay);
+
+        // Play metronome click if enabled (no swing applied to metronome)
         if (this.metronomeEnabled) {
             this.playMetronomeClick();
         }
@@ -918,28 +940,28 @@ class PO33Sampler {
         this.setupRadialKnob('filter-freq', 80, 8000, 10);
         this.setupRadialKnob('filter-res', 0.1, 20, 0.1);
 
+        // Swing controls - setup as radial knob
+        this.setupRadialKnob('swing', 0, 100, 1);
+
+        // Global swing control
+        const globalSwingSlider = document.getElementById('global-swing');
+        const swingDisplay = document.getElementById('swing-display');
+        
+        globalSwingSlider.addEventListener('input', (e) => {
+            this.globalSwing = parseInt(e.target.value);
+            swingDisplay.textContent = `${this.globalSwing}%`;
+        });
+
         // Loop toggle control
         document.getElementById('loop-toggle').addEventListener('click', (e) => {
             this.sampleParams[this.editingPad].loopOnHold = !this.sampleParams[this.editingPad].loopOnHold;
             e.currentTarget.classList.toggle('active', this.sampleParams[this.editingPad].loopOnHold);
-            
-            // If loop is enabled, disable one-shot mode
-            if (this.sampleParams[this.editingPad].loopOnHold) {
-                this.sampleParams[this.editingPad].oneShotMode = false;
-                document.getElementById('oneshot-toggle').classList.remove('active');
-            }
         });
 
         // One-shot toggle control
         document.getElementById('oneshot-toggle').addEventListener('click', (e) => {
             this.sampleParams[this.editingPad].oneShotMode = !this.sampleParams[this.editingPad].oneShotMode;
             e.currentTarget.classList.toggle('active', this.sampleParams[this.editingPad].oneShotMode);
-            
-            // If one-shot is enabled, disable loop mode
-            if (this.sampleParams[this.editingPad].oneShotMode) {
-                this.sampleParams[this.editingPad].loopOnHold = false;
-                document.getElementById('loop-toggle').classList.remove('active');
-            }
         });
 
         // Zoom controls
@@ -1055,6 +1077,11 @@ class PO33Sampler {
         
         // Load one-shot toggle state
         document.getElementById('oneshot-toggle').classList.toggle('active', params.oneShotMode);
+        
+        // Load swing value and update visual rotation
+        document.getElementById('swing-knob').value = params.swing;
+        document.getElementById('swing-value').textContent = params.swing;
+        updateKnobRotation('swing', params.swing, 0, 100);
     }
 
     drawWaveform() {

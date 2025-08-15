@@ -565,8 +565,14 @@ body {
 }
 
 .step.current {
-    box-shadow: 0 0 0 2px rgba(139, 115, 85, 0.6);
+    background: linear-gradient(135deg, #ff6b35, #f7931e) !important;
+    box-shadow: 
+        0 0 0 2px #ff6b35,
+        0 0 8px rgba(255, 107, 53, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
     z-index: 1;
+    transform: scale(1.1);
+    border-color: #ff8c00;
 }
 
 

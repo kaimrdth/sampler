@@ -821,8 +821,15 @@ class PO33Sampler {
     }
 
     playStep() {
-        // Update visual step indicator (always 16 steps shown)
-        const visualStep = Math.floor((this.subStep / this.maxSubdivision) * 16);
+        // Update visual step indicator based on selected pad's subdivision when in sequencer mode
+        // In sequencer mode, show timing for the currently selected pad
+        // Otherwise, use the global programming subdivision
+        const subdivisionToUse = this.isSequencerMode ? 
+            this.sampleParams[this.selectedPad].subdivision : 
+            this.currentSubdivision;
+        const stepsPerSubdivision = this.maxSubdivision / subdivisionToUse;
+        const visualStep = Math.floor((this.subStep / stepsPerSubdivision) % 16);
+        
         document.querySelectorAll('.step').forEach(step => {
             step.classList.remove('current');
         });

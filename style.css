@@ -398,26 +398,26 @@ body {
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-.bank-selector {
+.speed-selector, .bank-selector {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 4px;
 }
 
-.bank-label {
+.speed-label, .bank-label {
     font-size: 10px;
     color: #ccc;
     letter-spacing: 0.2px;
     text-transform: lowercase;
 }
 
-.bank-buttons {
+.speed-buttons, .bank-buttons {
     display: flex;
     gap: 2px;
 }
 
-.bank-btn {
+.speed-btn, .bank-btn {
     background: transparent;
     color: #ccc;
     border: 1px solid rgba(255, 255, 255, 0.2);
@@ -436,15 +436,20 @@ body {
     justify-content: center;
 }
 
-.bank-btn:hover {
+.speed-btn:hover, .bank-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     color: #fff;
 }
 
-.bank-btn.active {
+.speed-btn.active, .bank-btn.active {
     background: #f59e0b;
     color: #fefcf8;
     border-color: #f59e0b;
+}
+
+.speed-btn.active {
+    background: #4a9eff;
+    border-color: #4a9eff;
 }
 
 .bank-btn.has-patterns {

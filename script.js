@@ -16,12 +16,21 @@ class PO33Sampler {
         this.sequencePatterns = new Array(4).fill(null).map(() => 
             new Array(16).fill(null).map(() => new Array(16).fill(false))
         );
+        // Off-grid recording: store notes with precise timing
+        this.offGridNotes = new Array(4).fill(null).map(() => 
+            new Array(16).fill(null).map(() => [])
+        );
         this.currentBank = 0;
         this.selectedPad = 0;
         this.tempo = 120;
         this.globalSwing = 0;  // Global swing amount (0-100)
         this.stepInterval = null;
         this.isRealtimeRecording = false;
+        
+        // Speed multiplier settings
+        this.speedMultiplier = 1; // 1x, 2x, 4x
+        this.subStep = 0; // For tracking sub-divisions
+        this.subStepCount = 16; // Base step count
         
         // Metronome properties
         this.metronomeEnabled = false;
@@ -162,6 +171,11 @@ class PO33Sampler {
         // Bank selection buttons
         document.querySelectorAll('.bank-btn').forEach((btn, index) => {
             btn.addEventListener('click', () => this.switchBank(index));
+        });
+        
+        // Speed multiplier buttons
+        document.querySelectorAll('.speed-btn').forEach((btn) => {
+            btn.addEventListener('click', () => this.setSpeedMultiplier(parseInt(btn.dataset.speed)));
         });
         
         document.querySelectorAll('.pad').forEach((pad, index) => {
@@ -762,8 +776,12 @@ class PO33Sampler {
         
         this.isSequencerPlaying = true;
         this.currentStep = 0;
+        this.subStep = 0;
         
-        const stepTime = (60 / this.tempo) * 1000;
+        // Calculate step time based on speed multiplier
+        // At 1x: 16th notes, at 2x: 32nd notes, at 4x: 64th notes
+        const baseStepTime = (60 / this.tempo) * 1000 / 4; // Quarter note divided by 4 = 16th note
+        const stepTime = baseStepTime / this.speedMultiplier;
         
         this.stepInterval = setInterval(() => {
             this.playStep();
@@ -783,49 +801,68 @@ class PO33Sampler {
     }
 
     playStep() {
+        // Update visual step indicator based on main grid (16 steps)
+        const visualStep = Math.floor(this.subStep / this.speedMultiplier);
         document.querySelectorAll('.step').forEach(step => {
             step.classList.remove('current');
         });
 
-        const currentStepElement = document.querySelector(`[data-step="${this.currentStep}"]`);
+        const currentStepElement = document.querySelector(`[data-step="${visualStep}"]`);
         if (currentStepElement) {
             currentStepElement.classList.add('current');
         }
 
-        // Calculate swing delay for off-beat steps (1, 3, 5, 7, 9, 11, 13, 15)
-        const isOffBeat = this.currentStep % 2 === 1;
+        // Calculate swing delay for off-beat sub-steps
+        const isOffBeat = this.subStep % 2 === 1;
         let swingDelay = 0;
         
         if (isOffBeat) {
             // Apply swing to off-beat steps
-            const stepTime = (60 / this.tempo) * 1000;
+            const baseStepTime = (60 / this.tempo) * 1000 / 4;
+            const stepTime = baseStepTime / this.speedMultiplier;
             const maxSwingDelay = stepTime * 0.3; // Max 30% of step time
             swingDelay = (this.globalSwing / 100) * maxSwingDelay;
         }
 
         // Schedule sample playback with swing delay
         setTimeout(() => {
-            // Play all pads that have this step enabled
+            // Play grid-based notes on main steps
+            if (this.subStep % this.speedMultiplier === 0) {
+                const mainStep = this.subStep / this.speedMultiplier;
+                for (let padIndex = 0; padIndex < 16; padIndex++) {
+                    if (this.sequencePatterns[this.currentBank][padIndex][mainStep]) {
+                        // Apply pad-specific swing on top of global swing
+                        const padSwingDelay = isOffBeat ? 
+                            (this.sampleParams[padIndex].swing / 100) * ((60 / this.tempo) * 1000 / 4 * 0.3) : 0;
+                        
+                        setTimeout(() => {
+                            this.playSample(padIndex);
+                            this.triggerPadGlow(padIndex);
+                        }, padSwingDelay);
+                    }
+                }
+            }
+            
+            // Play off-grid notes
             for (let padIndex = 0; padIndex < 16; padIndex++) {
-                if (this.sequencePatterns[this.currentBank][padIndex][this.currentStep]) {
-                    // Apply pad-specific swing on top of global swing
-                    const padSwingDelay = isOffBeat ? 
-                        (this.sampleParams[padIndex].swing / 100) * ((60 / this.tempo) * 1000 * 0.3) : 0;
-                    
-                    setTimeout(() => {
+                const offGridNotes = this.offGridNotes[this.currentBank][padIndex];
+                offGridNotes.forEach(note => {
+                    if (note.subStep === this.subStep) {
                         this.playSample(padIndex);
                         this.triggerPadGlow(padIndex);
-                    }, padSwingDelay);
-                }
+                    }
+                });
             }
         }, swingDelay);
 
-        // Play metronome click if enabled (no swing applied to metronome)
-        if (this.metronomeEnabled) {
+        // Play metronome click only on main beats (every 4th sub-step in 1x mode)
+        if (this.metronomeEnabled && this.subStep % (4 * this.speedMultiplier) === 0) {
             this.playMetronomeClick();
         }
 
-        this.currentStep = (this.currentStep + 1) % 16;
+        // Advance step counters
+        this.subStep = (this.subStep + 1) % (16 * this.speedMultiplier);
+        this.currentStep = Math.floor(this.subStep / this.speedMultiplier);
     }
 
     stop() {
@@ -1418,14 +1455,25 @@ class PO33Sampler {
     }
 
     recordPadHit(padIndex) {
-        // Record the pad hit to the current step position
-        this.sequencePatterns[this.currentBank][padIndex][this.currentStep] = true;
-        
-        // Update visual if this pad is currently selected in sequencer mode
-        if (this.isSequencerMode && this.selectedPad === padIndex) {
-            const step = document.querySelector(`[data-step="${this.currentStep}"]`);
-            if (step) {
-                step.classList.add('active');
+        // Record off-grid if we're between main steps in higher speed multipliers
+        if (this.subStep % this.speedMultiplier !== 0) {
+            // Off-grid recording
+            const offGridNote = {
+                subStep: this.subStep,
+                timestamp: Date.now()
+            };
+            this.offGridNotes[this.currentBank][padIndex].push(offGridNote);
+        } else {
+            // On-grid recording (traditional grid-based recording)
+            const mainStep = this.subStep / this.speedMultiplier;
+            this.sequencePatterns[this.currentBank][padIndex][mainStep] = true;
+            
+            // Update visual if this pad is currently selected in sequencer mode
+            if (this.isSequencerMode && this.selectedPad === padIndex) {
+                const step = document.querySelector(`[data-step="${mainStep}"]`);
+                if (step) {
+                    step.classList.add('active');
+                }
             }
         }
         
@@ -1433,9 +1481,29 @@ class PO33Sampler {
         this.updateBankIndicators();
     }
 
+    setSpeedMultiplier(multiplier) {
+        if ([1, 2, 4].includes(multiplier)) {
+            this.speedMultiplier = multiplier;
+            
+            // Update UI
+            document.querySelectorAll('.speed-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.speed) === multiplier);
+            });
+            
+            // Restart sequencer if it's playing to apply new timing
+            if (this.isSequencerPlaying) {
+                this.stopSequencer();
+                this.startSequencer();
+            }
+        }
+    }
+
     clearPattern() {
         // Clear the pattern for the currently selected pad
         this.sequencePatterns[this.currentBank][this.selectedPad].fill(false);
+        // Clear off-grid notes for the currently selected pad
+        this.offGridNotes[this.currentBank][this.selectedPad] = [];
+        
         document.querySelectorAll('.step').forEach(step => {
             step.classList.remove('active');
         });
@@ -1479,9 +1547,10 @@ class PO33Sampler {
         document.querySelectorAll('.bank-btn').forEach((btn, bankIndex) => {
             let hasPatterns = false;
             
-            // Check if any pad in this bank has any steps
+            // Check if any pad in this bank has any steps or off-grid notes
             for (let padIndex = 0; padIndex < 16; padIndex++) {
-                if (this.sequencePatterns[bankIndex][padIndex].some(step => step)) {
+                if (this.sequencePatterns[bankIndex][padIndex].some(step => step) ||
+                    this.offGridNotes[bankIndex][padIndex].length > 0) {
                     hasPatterns = true;
                     break;
                 }

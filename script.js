@@ -27,10 +27,11 @@ class PO33Sampler {
         this.stepInterval = null;
         this.isRealtimeRecording = false;
         
-        // Speed multiplier settings
-        this.speedMultiplier = 1; // 1x, 2x, 4x
-        this.subStep = 0; // For tracking sub-divisions
-        this.subStepCount = 16; // Base step count
+        // Subdivision settings
+        this.currentSubdivision = 16; // Current programming subdivision (4=quarter, 8=eighth, 16=sixteenth, 32=thirty-second)
+        this.maxSubdivision = 32; // Finest resolution the sequencer runs at
+        this.subStep = 0; // For tracking finest sub-divisions
+        this.subStepCount = 16; // Visual step count (always 16)
         
         // Metronome properties
         this.metronomeEnabled = false;
@@ -66,7 +67,8 @@ class PO33Sampler {
             polyMode: 'poly', // 'poly' or 'mono'
             loopOnHold: false, // Loop sample when pad is held down
             oneShotMode: true,  // ONE-SHOT mode (bypasses ADSR), default true
-            swing: 0         // Pad-specific swing amount (0-100)
+            swing: 0,        // Pad-specific swing amount (0-100)
+            subdivision: 4   // Note subdivision: 1=whole, 2=half, 4=quarter, 8=eighth, 16=sixteenth, 32=thirty-second
         }));
         
         // Waveform zoom state (per pad)
@@ -173,9 +175,9 @@ class PO33Sampler {
             btn.addEventListener('click', () => this.switchBank(index));
         });
         
-        // Speed multiplier buttons
-        document.querySelectorAll('.speed-btn').forEach((btn) => {
-            btn.addEventListener('click', () => this.setSpeedMultiplier(parseInt(btn.dataset.speed)));
+        // Subdivision buttons
+        document.querySelectorAll('.subdivision-btn').forEach((btn) => {
+            btn.addEventListener('click', () => this.setCurrentSubdivision(parseInt(btn.dataset.subdivision)));
         });
         
         document.querySelectorAll('.pad').forEach((pad, index) => {
@@ -435,6 +437,7 @@ class PO33Sampler {
         // Update sequencer header info
         document.getElementById('selected-pad-number').textContent = String(this.selectedPad + 1).padStart(2, '0');
         const padNameElement = document.getElementById('selected-pad-name');
+        const padSubdivisionElement = document.getElementById('selected-pad-subdivision');
         
         if (this.samples[this.selectedPad]) {
             padNameElement.textContent = 'loaded';
@@ -443,6 +446,16 @@ class PO33Sampler {
             padNameElement.textContent = 'empty';
             padNameElement.classList.remove('has-sample');
         }
+        
+        // Show the pad's current subdivision
+        const padSubdivision = this.sampleParams[this.selectedPad].subdivision;
+        padSubdivisionElement.textContent = `1/${padSubdivision}`;
+        
+        // Update subdivision buttons to reflect this pad's setting
+        this.currentSubdivision = padSubdivision;
+        document.querySelectorAll('.subdivision-btn').forEach(btn => {
+            btn.classList.toggle('active', parseInt(btn.dataset.subdivision) === padSubdivision);
+        });
         
         // Load the pattern for this pad
         this.loadSequencePattern();
@@ -740,12 +753,19 @@ class PO33Sampler {
     toggleStep(stepIndex) {
         if (!this.isSequencerMode) return;
         
-        this.sequencePatterns[this.currentBank][this.selectedPad][stepIndex] = !this.sequencePatterns[this.currentBank][this.selectedPad][stepIndex];
-        const step = document.querySelector(`[data-step="${stepIndex}"]`);
-        step.classList.toggle('active', this.sequencePatterns[this.currentBank][this.selectedPad][stepIndex]);
+        const padSubdivision = this.sampleParams[this.selectedPad].subdivision;
+        const stepsPerSubdivision = 16 / padSubdivision; // How many visual steps per note
+        const canBeToggled = (stepIndex % stepsPerSubdivision) === 0;
         
-        // Update bank indicators
-        this.updateBankIndicators();
+        // Only allow toggling steps that align with the current subdivision
+        if (canBeToggled) {
+            this.sequencePatterns[this.currentBank][this.selectedPad][stepIndex] = !this.sequencePatterns[this.currentBank][this.selectedPad][stepIndex];
+            const step = document.querySelector(`[data-step="${stepIndex}"]`);
+            step.classList.toggle('active', this.sequencePatterns[this.currentBank][this.selectedPad][stepIndex]);
+            
+            // Update bank indicators
+            this.updateBankIndicators();
+        }
     }
 
     togglePlay() {
@@ -778,10 +798,10 @@ class PO33Sampler {
         this.currentStep = 0;
         this.subStep = 0;
         
-        // Calculate step time based on speed multiplier
-        // At 1x: 16th notes, at 2x: 32nd notes, at 4x: 64th notes
-        const baseStepTime = (60 / this.tempo) * 1000 / 4; // Quarter note divided by 4 = 16th note
-        const stepTime = baseStepTime / this.speedMultiplier;
+        // Always run sequencer at the finest resolution (32nd notes)
+        // This allows all subdivisions to be played correctly
+        const quarterNoteTime = (60 / this.tempo) * 1000; // Quarter note in milliseconds
+        const stepTime = quarterNoteTime / this.maxSubdivision; // 32nd note timing
         
         this.stepInterval = setInterval(() => {
             this.playStep();
@@ -801,8 +821,8 @@ class PO33Sampler {
     }
 
     playStep() {
-        // Update visual step indicator based on main grid (16 steps)
-        const visualStep = Math.floor(this.subStep / this.speedMultiplier);
+        // Update visual step indicator (always 16 steps shown)
+        const visualStep = Math.floor((this.subStep / this.maxSubdivision) * 16);
         document.querySelectorAll('.step').forEach(step => {
             step.classList.remove('current');
         });
@@ -812,33 +832,45 @@ class PO33Sampler {
             currentStepElement.classList.add('current');
         }
 
-        // Calculate swing delay for off-beat sub-steps
-        const isOffBeat = this.subStep % 2 === 1;
-        let swingDelay = 0;
-        
-        if (isOffBeat) {
-            // Apply swing to off-beat steps
-            const baseStepTime = (60 / this.tempo) * 1000 / 4;
-            const stepTime = baseStepTime / this.speedMultiplier;
-            const maxSwingDelay = stepTime * 0.3; // Max 30% of step time
-            swingDelay = (this.globalSwing / 100) * maxSwingDelay;
-        }
-
-        // Schedule sample playback with swing delay
-        setTimeout(() => {
-            // Play grid-based notes on main steps
-            if (this.subStep % this.speedMultiplier === 0) {
-                const mainStep = this.subStep / this.speedMultiplier;
-                for (let padIndex = 0; padIndex < 16; padIndex++) {
-                    if (this.sequencePatterns[this.currentBank][padIndex][mainStep]) {
-                        // Apply pad-specific swing on top of global swing
-                        const padSwingDelay = isOffBeat ? 
-                            (this.sampleParams[padIndex].swing / 100) * ((60 / this.tempo) * 1000 / 4 * 0.3) : 0;
+        // Schedule sample playback (swing is calculated per-sample)
+            // Check each pad to see if it should play at this substep
+            for (let padIndex = 0; padIndex < 16; padIndex++) {
+                const padSubdivision = this.sampleParams[padIndex].subdivision;
+                const stepsPerSubdivision = this.maxSubdivision / padSubdivision; // How many 32nd notes per subdivision
+                
+                // Check if this substep aligns with the pad's subdivision
+                if (this.subStep % stepsPerSubdivision === 0) {
+                    const padStep = Math.floor(this.subStep / stepsPerSubdivision) % 16;
+                    
+                    if (this.sequencePatterns[this.currentBank][padIndex][padStep]) {
+                        // Calculate swing for this specific hit
+                        let swingDelay = 0;
+                        
+                        // Determine if this hit is on a musical off-beat based on the pad's subdivision
+                        const isMusicalOffBeat = this.isMusicalOffBeat(padStep, padSubdivision);
+                        
+                        if (isMusicalOffBeat) {
+                            const quarterNoteTime = (60 / this.tempo) * 1000;
+                            const subdivisionTime = quarterNoteTime / padSubdivision;
+                            const maxSwingDelay = subdivisionTime * 0.5; // Max 50% of subdivision time
+                            
+                            // Apply global swing
+                            if (this.globalSwing > 0) {
+                                swingDelay = (this.globalSwing / 100) * maxSwingDelay;
+                            }
+                            
+                            // Apply pad-specific swing (overrides global if higher)
+                            const padSwingAmount = this.sampleParams[padIndex].swing;
+                            if (padSwingAmount > 0) {
+                                const padSwingDelay = (padSwingAmount / 100) * maxSwingDelay;
+                                swingDelay = Math.max(swingDelay, padSwingDelay);
+                            }
+                        }
                         
                         setTimeout(() => {
                             this.playSample(padIndex);
                             this.triggerPadGlow(padIndex);
-                        }, padSwingDelay);
+                        }, swingDelay);
                     }
                 }
             }
@@ -853,16 +885,33 @@ class PO33Sampler {
                     }
                 });
             }
-        }, swingDelay);
 
-        // Play metronome click only on main beats (every 4th sub-step in 1x mode)
-        if (this.metronomeEnabled && this.subStep % (4 * this.speedMultiplier) === 0) {
+        // Play metronome click on quarter note boundaries (every 8 32nd notes)
+        if (this.metronomeEnabled && this.subStep % 8 === 0) {
             this.playMetronomeClick();
         }
 
-        // Advance step counters
-        this.subStep = (this.subStep + 1) % (16 * this.speedMultiplier);
-        this.currentStep = Math.floor(this.subStep / this.speedMultiplier);
+        // Advance step counters (32 32nd notes = 1 full cycle through 16 visual steps)
+        this.subStep = (this.subStep + 1) % 32;
+        this.currentStep = Math.floor((this.subStep / 32) * 16);
+    }
+
+    isMusicalOffBeat(step, subdivision) {
+        // Determine if a step is on a musical off-beat based on subdivision
+        // For swing, we care about the "and" of beats (upbeats)
+        
+        switch(subdivision) {
+            case 4: // Quarter notes: steps 1,3 are off-beats (but quarter notes don't really have swing)
+                return step % 2 === 1;
+            case 8: // Eighth notes: steps 1,3,5,7,9,11,13,15 are off-beats  
+                return step % 2 === 1;
+            case 16: // Sixteenth notes: steps 1,3,5,7,9,11,13,15 are off-beats (every other step)
+                return step % 2 === 1;
+            case 32: // Thirty-second notes: steps 1,3,5,7,9,11,13,15 are off-beats
+                return step % 2 === 1;
+            default:
+                return false;
+        }
     }
 
     stop() {
@@ -1449,51 +1498,72 @@ class PO33Sampler {
     loadSequencePattern() {
         // Load the pattern for the currently selected pad
         const pattern = this.sequencePatterns[this.currentBank][this.selectedPad];
+        const padSubdivision = this.sampleParams[this.selectedPad].subdivision;
+        
         document.querySelectorAll('.step').forEach((step, index) => {
-            step.classList.toggle('active', pattern[index]);
+            // Show pattern based on the pad's subdivision
+            // For quarter notes (4), only steps 0,4,8,12 can be active
+            // For eighth notes (8), only steps 0,2,4,6,8,10,12,14 can be active  
+            // For sixteenth notes (16), all steps can be active
+            // For thirty-second notes (32), all steps can be active
+            
+            const stepsPerSubdivision = 16 / padSubdivision; // How many visual steps per note
+            const canBeActive = (index % stepsPerSubdivision) === 0;
+            
+            if (canBeActive) {
+                step.classList.toggle('active', pattern[index]);
+                step.classList.remove('disabled');
+            } else {
+                step.classList.remove('active');
+                step.classList.add('disabled');
+            }
         });
     }
 
     recordPadHit(padIndex) {
-        // Record off-grid if we're between main steps in higher speed multipliers
-        if (this.subStep % this.speedMultiplier !== 0) {
-            // Off-grid recording
+        // Get the pad's current subdivision setting
+        const padSubdivision = this.sampleParams[padIndex].subdivision;
+        const stepsPerSubdivision = this.maxSubdivision / padSubdivision; // How many 32nd notes per subdivision
+        
+        // Check if we're on a subdivision boundary for this pad
+        if (this.subStep % stepsPerSubdivision === 0) {
+            // On-grid recording for this pad's subdivision
+            const padStep = Math.floor(this.subStep / stepsPerSubdivision) % 16;
+            this.sequencePatterns[this.currentBank][padIndex][padStep] = true;
+            
+            // Update visual if this pad is currently selected in sequencer mode
+            if (this.isSequencerMode && this.selectedPad === padIndex) {
+                const step = document.querySelector(`[data-step="${padStep}"]`);
+                if (step) {
+                    step.classList.add('active');
+                }
+            }
+        } else {
+            // Off-grid recording (between subdivision boundaries)
             const offGridNote = {
                 subStep: this.subStep,
                 timestamp: Date.now()
             };
             this.offGridNotes[this.currentBank][padIndex].push(offGridNote);
-        } else {
-            // On-grid recording (traditional grid-based recording)
-            const mainStep = this.subStep / this.speedMultiplier;
-            this.sequencePatterns[this.currentBank][padIndex][mainStep] = true;
-            
-            // Update visual if this pad is currently selected in sequencer mode
-            if (this.isSequencerMode && this.selectedPad === padIndex) {
-                const step = document.querySelector(`[data-step="${mainStep}"]`);
-                if (step) {
-                    step.classList.add('active');
-                }
-            }
         }
         
         // Update bank indicators
         this.updateBankIndicators();
     }
 
-    setSpeedMultiplier(multiplier) {
-        if ([1, 2, 4].includes(multiplier)) {
-            this.speedMultiplier = multiplier;
+    setCurrentSubdivision(subdivision) {
+        if ([4, 8, 16, 32].includes(subdivision)) {
+            this.currentSubdivision = subdivision;
             
             // Update UI
-            document.querySelectorAll('.speed-btn').forEach(btn => {
-                btn.classList.toggle('active', parseInt(btn.dataset.speed) === multiplier);
+            document.querySelectorAll('.subdivision-btn').forEach(btn => {
+                btn.classList.toggle('active', parseInt(btn.dataset.subdivision) === subdivision);
             });
             
-            // Restart sequencer if it's playing to apply new timing
-            if (this.isSequencerPlaying) {
-                this.stopSequencer();
-                this.startSequencer();
+            // Update the selected pad's subdivision
+            if (this.isSequencerMode) {
+                this.sampleParams[this.selectedPad].subdivision = subdivision;
+                this.updateSequencerPadSelection(); // Refresh display
             }
         }
     }

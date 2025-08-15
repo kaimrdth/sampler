@@ -54,7 +54,8 @@ class PO33Sampler {
             trimStart: 0.0,  // Start position (0-1)
             trimEnd: 1.0,    // End position (0-1)
             polyMode: 'poly', // 'poly' or 'mono'
-            loopOnHold: false // Loop sample when pad is held down
+            loopOnHold: false, // Loop sample when pad is held down
+            oneShotMode: true  // ONE-SHOT mode (bypasses ADSR), default true
         }));
         
         // Waveform zoom state (per pad)
@@ -635,30 +636,36 @@ class PO33Sampler {
             filterNode.connect(gainNode);
             gainNode.connect(this.audioContext.destination);
             
-            // Set up ADSR envelope
-            const attackTime = params.attack;
-            const decayTime = params.decay;
-            const sustainLevel = params.sustain;
-            const releaseTime = params.release;
-            
-            // Start with silence
-            gainNode.gain.setValueAtTime(0, currentTime);
-            
-            // Apply volume scaling to envelope
-            const maxGain = params.volume;
-            
-            // Attack phase
-            gainNode.gain.linearRampToValueAtTime(maxGain, currentTime + attackTime);
-            
-            // Decay phase
-            gainNode.gain.linearRampToValueAtTime(maxGain * sustainLevel, currentTime + attackTime + decayTime);
-            
-            // Sustain phase (maintain level until release)
-            const sustainEnd = currentTime + attackTime + decayTime + 0.1; // Short sustain for triggered samples
-            
-            // Release phase
-            gainNode.gain.setValueAtTime(maxGain * sustainLevel, sustainEnd);
-            gainNode.gain.linearRampToValueAtTime(0, sustainEnd + releaseTime);
+            // Set up envelope - ADSR or ONE-SHOT mode
+            if (params.oneShotMode) {
+                // ONE-SHOT mode: just set volume directly without envelope
+                gainNode.gain.setValueAtTime(params.volume, currentTime);
+            } else {
+                // ADSR mode: apply full envelope
+                const attackTime = params.attack;
+                const decayTime = params.decay;
+                const sustainLevel = params.sustain;
+                const releaseTime = params.release;
+                
+                // Start with silence
+                gainNode.gain.setValueAtTime(0, currentTime);
+                
+                // Apply volume scaling to envelope
+                const maxGain = params.volume;
+                
+                // Attack phase
+                gainNode.gain.linearRampToValueAtTime(maxGain, currentTime + attackTime);
+                
+                // Decay phase
+                gainNode.gain.linearRampToValueAtTime(maxGain * sustainLevel, currentTime + attackTime + decayTime);
+                
+                // Sustain phase (maintain level until release)
+                const sustainEnd = currentTime + attackTime + decayTime + 0.1; // Short sustain for triggered samples
+                
+                // Release phase
+                gainNode.gain.setValueAtTime(maxGain * sustainLevel, sustainEnd);
+                gainNode.gain.linearRampToValueAtTime(0, sustainEnd + releaseTime);
+            }
             
             // Track source for mono mode or looping
             if (params.polyMode === 'mono' || (params.loopOnHold && this.padHoldState[index])) {
@@ -680,9 +687,16 @@ class PO33Sampler {
                 // For non-looping, use the existing logic with duration
                 source.start(currentTime, trimStartTime, trimDuration);
                 
-                // Stop source after envelope completes (or trim duration, whichever is shorter)
-                const totalDuration = Math.min(sustainEnd + releaseTime + 0.1 - currentTime, trimDuration);
-                source.stop(currentTime + totalDuration);
+                // Stop source timing based on mode
+                if (params.oneShotMode) {
+                    // ONE-SHOT mode: just play the sample through
+                    source.stop(currentTime + trimDuration);
+                } else {
+                    // ADSR mode: stop after envelope completes (or trim duration, whichever is shorter)
+                    const sustainEnd = currentTime + params.attack + params.decay + 0.1;
+                    const totalDuration = Math.min(sustainEnd + params.release + 0.1 - currentTime, trimDuration);
+                    source.stop(currentTime + totalDuration);
+                }
             }
             
             console.log('Sample playing with effects successfully');
@@ -908,6 +922,24 @@ class PO33Sampler {
         document.getElementById('loop-toggle').addEventListener('click', (e) => {
             this.sampleParams[this.editingPad].loopOnHold = !this.sampleParams[this.editingPad].loopOnHold;
             e.currentTarget.classList.toggle('active', this.sampleParams[this.editingPad].loopOnHold);
+            
+            // If loop is enabled, disable one-shot mode
+            if (this.sampleParams[this.editingPad].loopOnHold) {
+                this.sampleParams[this.editingPad].oneShotMode = false;
+                document.getElementById('oneshot-toggle').classList.remove('active');
+            }
+        });
+
+        // One-shot toggle control
+        document.getElementById('oneshot-toggle').addEventListener('click', (e) => {
+            this.sampleParams[this.editingPad].oneShotMode = !this.sampleParams[this.editingPad].oneShotMode;
+            e.currentTarget.classList.toggle('active', this.sampleParams[this.editingPad].oneShotMode);
+            
+            // If one-shot is enabled, disable loop mode
+            if (this.sampleParams[this.editingPad].oneShotMode) {
+                this.sampleParams[this.editingPad].loopOnHold = false;
+                document.getElementById('loop-toggle').classList.remove('active');
+            }
         });
 
         // Zoom controls
@@ -1020,6 +1052,9 @@ class PO33Sampler {
         
         // Load loop toggle state
         document.getElementById('loop-toggle').classList.toggle('active', params.loopOnHold);
+        
+        // Load one-shot toggle state
+        document.getElementById('oneshot-toggle').classList.toggle('active', params.oneShotMode);
     }
 
     drawWaveform() {

@@ -398,26 +398,26 @@ body {
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-.speed-selector, .bank-selector {
+.speed-selector, .bank-selector, .subdivision-selector {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 4px;
 }
 
-.speed-label, .bank-label {
+.speed-label, .bank-label, .subdivision-label {
     font-size: 10px;
     color: #ccc;
     letter-spacing: 0.2px;
     text-transform: lowercase;
 }
 
-.speed-buttons, .bank-buttons {
+.speed-buttons, .bank-buttons, .subdivision-buttons {
     display: flex;
     gap: 2px;
 }
 
-.speed-btn, .bank-btn {
+.speed-btn, .bank-btn, .subdivision-btn {
     background: transparent;
     color: #ccc;
     border: 1px solid rgba(255, 255, 255, 0.2);
@@ -436,12 +436,12 @@ body {
     justify-content: center;
 }
 
-.speed-btn:hover, .bank-btn:hover {
+.speed-btn:hover, .bank-btn:hover, .subdivision-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     color: #fff;
 }
 
-.speed-btn.active, .bank-btn.active {
+.speed-btn.active, .bank-btn.active, .subdivision-btn.active {
     background: #f59e0b;
     color: #fefcf8;
     border-color: #f59e0b;
@@ -450,6 +450,12 @@ body {
 .speed-btn.active {
     background: #4a9eff;
     border-color: #4a9eff;
+}
+
+.subdivision-btn.active {
+    background: #8b5cf6;
+    color: #fefcf8;
+    border-color: #8b5cf6;
 }
 
 .bank-btn.has-patterns {

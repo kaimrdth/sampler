@@ -57,6 +57,14 @@ class PO33Sampler {
             loopOnHold: false // Loop sample when pad is held down
         }));
         
+        // Waveform zoom state (per pad)
+        this.waveformZoom = new Array(16).fill(null).map(() => ({
+            zoomLevel: 1.0,    // 1.0 = full view, higher = zoomed in
+            viewStart: 0.0,    // Start of visible window (0-1)
+            viewEnd: 1.0,      // End of visible window (0-1)
+            maxZoom: 32.0      // Maximum zoom level
+        }));
+        
         this.initializeAudio();
         this.setupEventListeners();
         this.updateTempo();
@@ -185,6 +193,7 @@ class PO33Sampler {
         
         this.setupEditControls();
         this.setupTrimHandles();
+        this.setupWaveformInteraction();
         this.setupDragAndDrop();
     }
 
@@ -204,6 +213,104 @@ class PO33Sampler {
         if (e.key === ' ') {
             e.preventDefault();
             this.toggleSequencer();
+        }
+
+        // Waveform editing shortcuts (only in edit mode)
+        if (this.isEditMode && this.samples[this.editingPad]) {
+            const finePrecision = e.shiftKey ? 0.0001 : 0.001;
+            const coarsePrecision = e.shiftKey ? 0.001 : 0.01;
+            const precision = e.ctrlKey || e.metaKey ? finePrecision : coarsePrecision;
+            
+            switch(e.key) {
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    if (e.altKey) {
+                        // Move start trim left
+                        this.sampleParams[this.editingPad].trimStart = Math.max(0, 
+                            this.sampleParams[this.editingPad].trimStart - precision);
+                        this.updateTrimHandles();
+                        this.updateTrimInfo();
+                    } else {
+                        // Pan left
+                        this.panWaveform(this.editingPad, -1);
+                    }
+                    break;
+                    
+                case 'ArrowRight':
+                    e.preventDefault();
+                    if (e.altKey) {
+                        // Move start trim right
+                        this.sampleParams[this.editingPad].trimStart = Math.min(
+                            this.sampleParams[this.editingPad].trimEnd - 0.001,
+                            this.sampleParams[this.editingPad].trimStart + precision);
+                        this.updateTrimHandles();
+                        this.updateTrimInfo();
+                    } else {
+                        // Pan right
+                        this.panWaveform(this.editingPad, 1);
+                    }
+                    break;
+                    
+                case 'ArrowUp':
+                    e.preventDefault();
+                    if (e.altKey) {
+                        // Move end trim right
+                        this.sampleParams[this.editingPad].trimEnd = Math.min(1,
+                            this.sampleParams[this.editingPad].trimEnd + precision);
+                        this.updateTrimHandles();
+                        this.updateTrimInfo();
+                    } else {
+                        // Zoom in
+                        this.zoomWaveform(this.editingPad, 1.2);
+                    }
+                    break;
+                    
+                case 'ArrowDown':
+                    e.preventDefault();
+                    if (e.altKey) {
+                        // Move end trim left
+                        this.sampleParams[this.editingPad].trimEnd = Math.max(
+                            this.sampleParams[this.editingPad].trimStart + 0.001,
+                            this.sampleParams[this.editingPad].trimEnd - precision);
+                        this.updateTrimHandles();
+                        this.updateTrimInfo();
+                    } else {
+                        // Zoom out
+                        this.zoomWaveform(this.editingPad, 0.8);
+                    }
+                    break;
+                    
+                case '0':
+                    e.preventDefault();
+                    this.resetWaveformZoom(this.editingPad);
+                    break;
+                    
+                case 'z':
+                    if (e.shiftKey) {
+                        e.preventDefault();
+                        // Snap start trim to zero crossing
+                        const buffer = this.samples[this.editingPad];
+                        const startSample = this.sampleParams[this.editingPad].trimStart * buffer.length;
+                        const zeroPosition = this.findZeroCrossing(buffer, startSample);
+                        this.sampleParams[this.editingPad].trimStart = zeroPosition;
+                        this.updateTrimHandles();
+                        this.updateTrimInfo();
+                    }
+                    break;
+                    
+                case 'x':
+                    if (e.shiftKey) {
+                        e.preventDefault();
+                        // Snap end trim to zero crossing
+                        const buffer = this.samples[this.editingPad];
+                        const endSample = this.sampleParams[this.editingPad].trimEnd * buffer.length;
+                        const zeroPosition = this.findZeroCrossing(buffer, endSample);
+                        this.sampleParams[this.editingPad].trimEnd = zeroPosition;
+                        this.updateTrimHandles();
+                        this.updateTrimInfo();
+                    }
+                    break;
+            }
         }
     }
 
@@ -803,6 +910,27 @@ class PO33Sampler {
             e.currentTarget.classList.toggle('active', this.sampleParams[this.editingPad].loopOnHold);
         });
 
+        // Zoom controls
+        document.getElementById('zoom-in-btn').addEventListener('click', () => {
+            this.zoomWaveform(this.editingPad, 2.0);
+        });
+        
+        document.getElementById('zoom-out-btn').addEventListener('click', () => {
+            this.zoomWaveform(this.editingPad, 0.5);
+        });
+        
+        document.getElementById('zoom-reset-btn').addEventListener('click', () => {
+            this.resetWaveformZoom(this.editingPad);
+        });
+        
+        document.getElementById('pan-left-btn').addEventListener('click', () => {
+            this.panWaveform(this.editingPad, -1);
+        });
+        
+        document.getElementById('pan-right-btn').addEventListener('click', () => {
+            this.panWaveform(this.editingPad, 1);
+        });
+
     }
 
     loadEditParams() {
@@ -904,7 +1032,16 @@ class PO33Sampler {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
         const data = buffer.getChannelData(0);
-        const step = Math.ceil(data.length / canvas.width);
+        const zoom = this.waveformZoom[this.editingPad];
+        
+        // Calculate the visible range of samples
+        const totalSamples = data.length;
+        const viewStartSample = Math.floor(zoom.viewStart * totalSamples);
+        const viewEndSample = Math.ceil(zoom.viewEnd * totalSamples);
+        const visibleSamples = viewEndSample - viewStartSample;
+        
+        // Calculate step size for higher resolution when zoomed
+        const samplesPerPixel = visibleSamples / canvas.width;
         const amp = canvas.height / 2;
         
         ctx.beginPath();
@@ -912,21 +1049,46 @@ class PO33Sampler {
         ctx.strokeStyle = editAccentColor;
         ctx.lineWidth = 1;
         
-        for (let i = 0; i < canvas.width; i++) {
+        // Draw waveform with higher precision when zoomed
+        for (let x = 0; x < canvas.width; x++) {
+            const startSample = viewStartSample + Math.floor(x * samplesPerPixel);
+            const endSample = Math.min(totalSamples - 1, viewStartSample + Math.floor((x + 1) * samplesPerPixel));
+            
             let min = 1.0;
             let max = -1.0;
             
-            for (let j = 0; j < step; j++) {
-                const datum = data[(i * step) + j];
-                if (datum < min) min = datum;
-                if (datum > max) max = datum;
+            // Sample the audio data for this pixel column
+            for (let i = startSample; i <= endSample; i++) {
+                if (i >= 0 && i < totalSamples) {
+                    const value = data[i];
+                    if (value < min) min = value;
+                    if (value > max) max = value;
+                }
             }
             
-            ctx.moveTo(i, (1 + min) * amp);
-            ctx.lineTo(i, (1 + max) * amp);
+            // Draw vertical line representing min/max for this pixel
+            ctx.moveTo(x, (1 + min) * amp);
+            ctx.lineTo(x, (1 + max) * amp);
         }
         
         ctx.stroke();
+        
+        // Draw zero line when zoomed in enough
+        if (zoom.zoomLevel > 4) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, amp);
+            ctx.lineTo(canvas.width, amp);
+            ctx.stroke();
+        }
+        
+        // Draw zoom level indicator
+        if (zoom.zoomLevel > 1) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.font = '10px monospace';
+            ctx.fillText(`${zoom.zoomLevel.toFixed(1)}x`, canvas.width - 30, 15);
+        }
         
         // Draw trim overlay
         this.updateTrimOverlay();
@@ -951,12 +1113,17 @@ class PO33Sampler {
             
             const rect = container.getBoundingClientRect();
             const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-            const position = x / rect.width;
+            const relativePosition = x / rect.width;
+            
+            // Convert relative position to absolute position considering zoom
+            const zoom = this.waveformZoom[this.editingPad];
+            const viewWidth = zoom.viewEnd - zoom.viewStart;
+            const absolutePosition = zoom.viewStart + (relativePosition * viewWidth);
             
             if (dragHandle === startHandle) {
-                this.sampleParams[this.editingPad].trimStart = Math.min(position, this.sampleParams[this.editingPad].trimEnd - 0.01);
+                this.sampleParams[this.editingPad].trimStart = Math.min(absolutePosition, this.sampleParams[this.editingPad].trimEnd - 0.001);
             } else if (dragHandle === endHandle) {
-                this.sampleParams[this.editingPad].trimEnd = Math.max(position, this.sampleParams[this.editingPad].trimStart + 0.01);
+                this.sampleParams[this.editingPad].trimEnd = Math.max(absolutePosition, this.sampleParams[this.editingPad].trimStart + 0.001);
             }
             
             this.updateTrimHandles();
@@ -981,24 +1148,103 @@ class PO33Sampler {
         document.addEventListener('touchend', endDrag);
     }
 
+    setupWaveformInteraction() {
+        const canvas = document.getElementById('waveform-canvas');
+        const container = document.querySelector('.waveform-container');
+        
+        // Mouse wheel zoom
+        container.addEventListener('wheel', (e) => {
+            if (!this.isEditMode || !this.samples[this.editingPad]) return;
+            
+            e.preventDefault();
+            
+            const rect = container.getBoundingClientRect();
+            const centerPoint = (e.clientX - rect.left) / rect.width;
+            const zoomFactor = e.deltaY < 0 ? 1.2 : 0.8;
+            
+            this.zoomWaveform(this.editingPad, zoomFactor, centerPoint);
+        });
+        
+        // Double-click to reset zoom
+        canvas.addEventListener('dblclick', (e) => {
+            if (!this.isEditMode || !this.samples[this.editingPad]) return;
+            this.resetWaveformZoom(this.editingPad);
+        });
+        
+        // Right-click context menu for waveform functions
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (!this.isEditMode || !this.samples[this.editingPad]) return;
+            
+            const rect = container.getBoundingClientRect();
+            const position = (e.clientX - rect.left) / rect.width;
+            const zoom = this.waveformZoom[this.editingPad];
+            const actualPosition = zoom.viewStart + (zoom.viewEnd - zoom.viewStart) * position;
+            
+            // Snap trim handles to zero crossings when shift is held
+            if (e.shiftKey) {
+                const buffer = this.samples[this.editingPad];
+                const samplePosition = actualPosition * buffer.length;
+                const zeroPosition = this.findZeroCrossing(buffer, samplePosition);
+                
+                // Set closest trim handle to zero crossing
+                const currentStart = this.sampleParams[this.editingPad].trimStart;
+                const currentEnd = this.sampleParams[this.editingPad].trimEnd;
+                
+                if (Math.abs(zeroPosition - currentStart) < Math.abs(zeroPosition - currentEnd)) {
+                    this.sampleParams[this.editingPad].trimStart = zeroPosition;
+                } else {
+                    this.sampleParams[this.editingPad].trimEnd = zeroPosition;
+                }
+                
+                this.updateTrimHandles();
+                this.updateTrimInfo();
+            }
+        });
+    }
+
     updateTrimHandles() {
         const params = this.sampleParams[this.editingPad];
+        const zoom = this.waveformZoom[this.editingPad];
         const startHandle = document.getElementById('start-handle');
         const endHandle = document.getElementById('end-handle');
         
-        startHandle.style.left = (params.trimStart * 100) + '%';
-        endHandle.style.left = (params.trimEnd * 100) + '%';
-        endHandle.style.transform = 'translateX(-100%)';
+        // Convert absolute trim positions to relative positions within the zoom view
+        const viewWidth = zoom.viewEnd - zoom.viewStart;
+        const startInView = (params.trimStart - zoom.viewStart) / viewWidth;
+        const endInView = (params.trimEnd - zoom.viewStart) / viewWidth;
+        
+        // Show handles only if they're within the visible range
+        const startVisible = params.trimStart >= zoom.viewStart && params.trimStart <= zoom.viewEnd;
+        const endVisible = params.trimEnd >= zoom.viewStart && params.trimEnd <= zoom.viewEnd;
+        
+        startHandle.style.display = startVisible ? 'block' : 'none';
+        endHandle.style.display = endVisible ? 'block' : 'none';
+        
+        if (startVisible) {
+            startHandle.style.left = (startInView * 100) + '%';
+        }
+        
+        if (endVisible) {
+            endHandle.style.left = (endInView * 100) + '%';
+            endHandle.style.transform = 'translateX(-100%)';
+        }
         
         this.updateTrimOverlay();
     }
 
     updateTrimOverlay() {
         const params = this.sampleParams[this.editingPad];
+        const zoom = this.waveformZoom[this.editingPad];
         const overlay = document.getElementById('trim-overlay');
         
-        const startPercent = params.trimStart * 100;
-        const endPercent = params.trimEnd * 100;
+        // Convert absolute trim positions to relative positions within the zoom view
+        const viewWidth = zoom.viewEnd - zoom.viewStart;
+        const startInView = Math.max(0, (params.trimStart - zoom.viewStart) / viewWidth);
+        const endInView = Math.min(1, (params.trimEnd - zoom.viewStart) / viewWidth);
+        
+        const startPercent = startInView * 100;
+        const endPercent = endInView * 100;
         
         // Create mask to show only the trimmed region
         overlay.style.background = `linear-gradient(to right, 
@@ -1020,9 +1266,85 @@ class PO33Sampler {
         const endTime = params.trimEnd * duration;
         const length = endTime - startTime;
         
-        document.getElementById('trim-start-value').textContent = startTime.toFixed(2);
-        document.getElementById('trim-end-value').textContent = endTime.toFixed(2);
-        document.getElementById('trim-length-value').textContent = length.toFixed(2);
+        document.getElementById('trim-start-value').textContent = startTime.toFixed(3);
+        document.getElementById('trim-end-value').textContent = endTime.toFixed(3);
+        document.getElementById('trim-length-value').textContent = length.toFixed(3);
+    }
+
+    zoomWaveform(padIndex, factor, centerPoint = 0.5) {
+        if (!this.samples[padIndex]) return;
+        
+        const zoom = this.waveformZoom[padIndex];
+        const oldZoomLevel = zoom.zoomLevel;
+        const newZoomLevel = Math.max(1.0, Math.min(zoom.maxZoom, zoom.zoomLevel * factor));
+        
+        if (newZoomLevel === oldZoomLevel) return;
+        
+        const currentViewWidth = zoom.viewEnd - zoom.viewStart;
+        const newViewWidth = currentViewWidth * (oldZoomLevel / newZoomLevel);
+        
+        const currentCenter = zoom.viewStart + currentViewWidth * centerPoint;
+        const newViewStart = Math.max(0, Math.min(1 - newViewWidth, currentCenter - newViewWidth * centerPoint));
+        const newViewEnd = newViewStart + newViewWidth;
+        
+        zoom.zoomLevel = newZoomLevel;
+        zoom.viewStart = newViewStart;
+        zoom.viewEnd = newViewEnd;
+        
+        this.drawWaveform();
+        this.updateTrimHandles();
+    }
+
+    panWaveform(padIndex, direction) {
+        if (!this.samples[padIndex]) return;
+        
+        const zoom = this.waveformZoom[padIndex];
+        const viewWidth = zoom.viewEnd - zoom.viewStart;
+        const panAmount = viewWidth * 0.1 * direction;
+        
+        const newViewStart = Math.max(0, Math.min(1 - viewWidth, zoom.viewStart + panAmount));
+        const newViewEnd = newViewStart + viewWidth;
+        
+        zoom.viewStart = newViewStart;
+        zoom.viewEnd = newViewEnd;
+        
+        this.drawWaveform();
+        this.updateTrimHandles();
+    }
+
+    resetWaveformZoom(padIndex) {
+        if (!this.samples[padIndex]) return;
+        
+        const zoom = this.waveformZoom[padIndex];
+        zoom.zoomLevel = 1.0;
+        zoom.viewStart = 0.0;
+        zoom.viewEnd = 1.0;
+        
+        this.drawWaveform();
+        this.updateTrimHandles();
+    }
+
+    findZeroCrossing(buffer, startSample, direction = 1) {
+        const data = buffer.getChannelData(0);
+        const length = data.length;
+        let currentSample = Math.round(startSample);
+        
+        if (currentSample < 0 || currentSample >= length) return startSample;
+        
+        const startValue = data[currentSample];
+        let lastValue = startValue;
+        
+        for (let i = 1; i < 1000 && currentSample + i * direction >= 0 && currentSample + i * direction < length; i++) {
+            const sample = currentSample + i * direction;
+            const value = data[sample];
+            
+            if ((lastValue >= 0 && value < 0) || (lastValue < 0 && value >= 0)) {
+                return sample / length;
+            }
+            lastValue = value;
+        }
+        
+        return startSample / length;
     }
 
     loadSequencePattern() {

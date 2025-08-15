@@ -1508,21 +1508,20 @@ class PO33Sampler {
         const padSubdivision = this.sampleParams[this.selectedPad].subdivision;
         
         document.querySelectorAll('.step').forEach((step, index) => {
-            // Show pattern based on the pad's subdivision
-            // For quarter notes (4), only steps 0,4,8,12 can be active
-            // For eighth notes (8), only steps 0,2,4,6,8,10,12,14 can be active  
-            // For sixteenth notes (16), all steps can be active
-            // For thirty-second notes (32), all steps can be active
+            // Reset all visual classes
+            step.classList.remove('primary', 'secondary', 'disabled');
             
             const stepsPerSubdivision = 16 / padSubdivision; // How many visual steps per note
             const canBeActive = (index % stepsPerSubdivision) === 0;
             
             if (canBeActive) {
+                // This step can be toggled - make it primary (emphasized)
+                step.classList.add('primary');
                 step.classList.toggle('active', pattern[index]);
-                step.classList.remove('disabled');
             } else {
+                // This step shows subdivision context - make it secondary (de-emphasized)
+                step.classList.add('secondary');
                 step.classList.remove('active');
-                step.classList.add('disabled');
             }
         });
     }

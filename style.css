@@ -537,6 +537,21 @@ body {
     position: relative;
 }
 
+.step.primary {
+    width: 28px;
+    height: 28px;
+    background: #909090;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.step.secondary {
+    width: 20px;
+    height: 20px;
+    background: #707070;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    opacity: 0.7;
+}
+
 .step::before {
     content: '';
     position: absolute;
@@ -558,10 +573,20 @@ body {
     background: #2a2520;
 }
 
+.step.primary.active {
+    background: #2a2520;
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
 .step.active::before {
     background: #f1efeb;
     width: 6px;
     height: 6px;
+}
+
+.step.primary.active::before {
+    width: 8px;
+    height: 8px;
 }
 
 .step.current {

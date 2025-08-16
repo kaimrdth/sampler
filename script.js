@@ -1593,14 +1593,6 @@ class PO33Sampler {
         ctx.lineTo(x, canvas.height);
         ctx.stroke();
         
-        // Draw playhead triangle at top
-        ctx.fillStyle = '#ff4444';
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x - 6, 12);
-        ctx.lineTo(x + 6, 12);
-        ctx.closePath();
-        ctx.fill();
     }
 
     zoomWaveform(padIndex, factor, centerPoint = 0.5) {

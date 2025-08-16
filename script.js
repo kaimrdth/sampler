@@ -38,8 +38,13 @@ class PO33Sampler {
         this.metronomeHighSound = null;
         this.metronomeLowSound = null;
         
-        // Track active audio sources for mono mode
+        // Track active audio sources and nodes for mono mode and real-time control
         this.activeSources = new Array(16).fill(null);
+        this.activeAudioNodes = new Array(16).fill(null).map(() => ({
+            sources: [], // Array of active sources for poly mode
+            filterNode: null,
+            gainNode: null
+        }));
         
         // Track pad hold state for looping
         this.padHoldState = new Array(16).fill(false);
@@ -401,13 +406,8 @@ class PO33Sampler {
         this.padHoldState[index] = false;
         
         // Stop looping audio source if it was looping
-        if (this.activeSources[index] && this.sampleParams[index].loopOnHold) {
-            try {
-                this.activeSources[index].stop();
-            } catch (e) {
-                // Source might already be stopped
-            }
-            this.activeSources[index] = null;
+        if (this.sampleParams[index].loopOnHold) {
+            this.stopActiveAudio(index);
         }
         
         // Don't remove active class if we're in edit mode and this is the editing pad
@@ -597,6 +597,79 @@ class PO33Sampler {
         }
     }
 
+    stopActiveAudio(index) {
+        // Stop active sources
+        if (this.activeSources[index]) {
+            try {
+                this.activeSources[index].stop();
+            } catch (e) {
+                // Source might already be stopped
+            }
+            this.activeSources[index] = null;
+        }
+        
+        // Clear active nodes
+        this.activeAudioNodes[index].sources.forEach(nodeSet => {
+            try {
+                nodeSet.source.stop();
+            } catch (e) {
+                // Source might already be stopped
+            }
+        });
+        
+        this.activeAudioNodes[index].filterNode = null;
+        this.activeAudioNodes[index].gainNode = null;
+        this.activeAudioNodes[index].sources = [];
+    }
+
+    updateActiveAudioNodes(index, paramType, value) {
+        // Update active audio nodes in real-time
+        const nodes = this.activeAudioNodes[index];
+        
+        if (!nodes.sources.length) return; // No active audio
+        
+        const currentTime = this.audioContext.currentTime;
+        
+        nodes.sources.forEach(nodeSet => {
+            try {
+                switch(paramType) {
+                    case 'filterFreq':
+                        if (nodeSet.filterNode) {
+                            nodeSet.filterNode.frequency.setValueAtTime(value, currentTime);
+                        }
+                        break;
+                    case 'filterRes':
+                        if (nodeSet.filterNode) {
+                            nodeSet.filterNode.Q.setValueAtTime(value, currentTime);
+                        }
+                        break;
+                    case 'filterType':
+                        if (nodeSet.filterNode) {
+                            nodeSet.filterNode.type = value;
+                        }
+                        break;
+                    case 'pitch':
+                        if (nodeSet.source) {
+                            nodeSet.source.playbackRate.setValueAtTime(value, currentTime);
+                        }
+                        break;
+                    case 'volume':
+                        if (nodeSet.gainNode) {
+                            // Only update if in ONE-SHOT mode (ADSR mode has scheduled envelope)
+                            const params = this.sampleParams[index];
+                            if (params.oneShotMode) {
+                                nodeSet.gainNode.gain.setValueAtTime(value, currentTime);
+                            }
+                        }
+                        break;
+                }
+            } catch (e) {
+                // Node might have been disconnected
+                console.warn('Error updating audio node:', e);
+            }
+        });
+    }
+
     async playSampleWithEffects(index) {
         console.log('playSampleWithEffects called for index:', index);
         console.log('Sample exists:', !!this.samples[index]);
@@ -624,13 +697,8 @@ class PO33Sampler {
             const currentTime = this.audioContext.currentTime;
 
             // Handle mono mode - stop previous instance
-            if (params.polyMode === 'mono' && this.activeSources[index]) {
-                try {
-                    this.activeSources[index].stop();
-                } catch (e) {
-                    // Source might already be stopped
-                }
-                this.activeSources[index] = null;
+            if (params.polyMode === 'mono') {
+                this.stopActiveAudio(index);
             }
 
             // Create audio nodes
@@ -696,15 +764,39 @@ class PO33Sampler {
                 gainNode.gain.linearRampToValueAtTime(0, sustainEnd + releaseTime);
             }
             
-            // Track source for mono mode or looping
-            if (params.polyMode === 'mono' || (params.loopOnHold && this.padHoldState[index])) {
+            // Track audio nodes for real-time control
+            const audioNodeSet = {
+                source: source,
+                filterNode: filterNode,
+                gainNode: gainNode
+            };
+
+            if (params.polyMode === 'mono') {
+                // Store single set for mono mode
                 this.activeSources[index] = source;
+                this.activeAudioNodes[index].filterNode = filterNode;
+                this.activeAudioNodes[index].gainNode = gainNode;
+                this.activeAudioNodes[index].sources = [audioNodeSet];
+            } else {
+                // Add to array for poly mode
+                this.activeAudioNodes[index].sources.push(audioNodeSet);
             }
 
             // Clean up when source ends
             source.onended = () => {
-                if (this.activeSources[index] === source) {
-                    this.activeSources[index] = null;
+                if (params.polyMode === 'mono') {
+                    if (this.activeSources[index] === source) {
+                        this.activeSources[index] = null;
+                        this.activeAudioNodes[index].filterNode = null;
+                        this.activeAudioNodes[index].gainNode = null;
+                        this.activeAudioNodes[index].sources = [];
+                    }
+                } else {
+                    // Remove from poly mode array
+                    const sourceIndex = this.activeAudioNodes[index].sources.findIndex(s => s.source === source);
+                    if (sourceIndex !== -1) {
+                        this.activeAudioNodes[index].sources.splice(sourceIndex, 1);
+                    }
                 }
             };
 
@@ -821,14 +913,10 @@ class PO33Sampler {
     }
 
     playStep() {
-        // Update visual step indicator based on selected pad's subdivision when in sequencer mode
-        // In sequencer mode, show timing for the currently selected pad
-        // Otherwise, use the global programming subdivision
-        const subdivisionToUse = this.isSequencerMode ? 
-            this.sampleParams[this.selectedPad].subdivision : 
-            this.currentSubdivision;
-        const stepsPerSubdivision = this.maxSubdivision / subdivisionToUse;
-        const visualStep = Math.floor((this.subStep / stepsPerSubdivision) % 16);
+        // Update visual step indicator - always show continuous progression across all 16 steps
+        // regardless of subdivision, so user can see where they are in the full 16-step pattern
+        const stepsPerBar = this.maxSubdivision * 4; // 32 * 4 = 128 substeps per bar (4/4 time)
+        const visualStep = Math.floor((this.subStep / (stepsPerBar / 16)) % 16);
         
         document.querySelectorAll('.step').forEach(step => {
             step.classList.remove('current');
@@ -932,17 +1020,10 @@ class PO33Sampler {
             this.stopRecording();
         }
         
-        // Stop all active samples (for mono mode)
-        this.activeSources.forEach((source, index) => {
-            if (source) {
-                try {
-                    source.stop();
-                } catch (e) {
-                    // Source might already be stopped
-                }
-                this.activeSources[index] = null;
-            }
-        });
+        // Stop all active samples
+        for (let i = 0; i < 16; i++) {
+            this.stopActiveAudio(i);
+        }
         
         // Reset UI states
         document.getElementById('play-btn').classList.remove('active');
@@ -1019,6 +1100,7 @@ class PO33Sampler {
         document.querySelectorAll('input[name="filter-type"]').forEach(radio => {
             radio.addEventListener('change', (e) => {
                 this.sampleParams[this.editingPad].filterType = e.target.value;
+                this.updateActiveAudioNodes(this.editingPad, 'filterType', e.target.value);
             });
         });
 
@@ -1886,6 +1968,7 @@ class PO33Sampler {
                 this.sampleParams[this.editingPad][paramName] = value;
                 valueDisplay.textContent = value.toFixed(2);
                 updateKnobRotation(value);
+                // Note: ADSR changes don't apply to currently playing samples since envelope is pre-scheduled
             }
         });
 
@@ -1917,6 +2000,7 @@ class PO33Sampler {
                 this.sampleParams[this.editingPad][paramName] = newValue;
                 valueDisplay.textContent = newValue.toFixed(2);
                 updateKnobRotation(newValue);
+                // Note: ADSR changes don't apply to currently playing samples since envelope is pre-scheduled
                 
                 // Subtle haptic feedback during adjustment
                 if (navigator.vibrate && Math.abs(newValue - startValue) > range * 0.05) {
@@ -2005,6 +2089,8 @@ class PO33Sampler {
                 valueDisplay.textContent = Math.round(value).toString();
             } else if (paramName === 'filter-res') {
                 valueDisplay.textContent = value.toFixed(1);
+            } else if (paramName === 'swing') {
+                valueDisplay.textContent = Math.round(value).toString();
             } else {
                 valueDisplay.textContent = value.toFixed(2);
             }
@@ -2016,12 +2102,18 @@ class PO33Sampler {
                 const value = parseFloat(e.target.value);
                 if (paramName === 'volume') {
                     this.sampleParams[this.editingPad].volume = value;
+                    this.updateActiveAudioNodes(this.editingPad, 'volume', value);
                 } else if (paramName === 'pitch') {
                     this.sampleParams[this.editingPad].pitch = value;
+                    this.updateActiveAudioNodes(this.editingPad, 'pitch', value);
                 } else if (paramName === 'filter-freq') {
                     this.sampleParams[this.editingPad].filterFreq = value;
+                    this.updateActiveAudioNodes(this.editingPad, 'filterFreq', value);
                 } else if (paramName === 'filter-res') {
                     this.sampleParams[this.editingPad].filterRes = value;
+                    this.updateActiveAudioNodes(this.editingPad, 'filterRes', value);
+                } else if (paramName === 'swing') {
+                    this.sampleParams[this.editingPad].swing = value;
                 }
                 updateValueDisplay(value);
                 updateKnobRotation(value);
@@ -2055,12 +2147,18 @@ class PO33Sampler {
                 knob.value = newValue;
                 if (paramName === 'volume') {
                     this.sampleParams[this.editingPad].volume = newValue;
+                    this.updateActiveAudioNodes(this.editingPad, 'volume', newValue);
                 } else if (paramName === 'pitch') {
                     this.sampleParams[this.editingPad].pitch = newValue;
+                    this.updateActiveAudioNodes(this.editingPad, 'pitch', newValue);
                 } else if (paramName === 'filter-freq') {
                     this.sampleParams[this.editingPad].filterFreq = newValue;
+                    this.updateActiveAudioNodes(this.editingPad, 'filterFreq', newValue);
                 } else if (paramName === 'filter-res') {
                     this.sampleParams[this.editingPad].filterRes = newValue;
+                    this.updateActiveAudioNodes(this.editingPad, 'filterRes', newValue);
+                } else if (paramName === 'swing') {
+                    this.sampleParams[this.editingPad].swing = newValue;
                 }
                 updateValueDisplay(newValue);
                 updateKnobRotation(newValue);

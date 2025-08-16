@@ -927,22 +927,26 @@ class PO33Sampler {
             currentStepElement.classList.add('current');
         }
 
-        // Schedule sample playback (swing is calculated per-sample)
-            // Check each pad to see if it should play at this substep
+        // Schedule sample playback - check if we're on a visual step boundary
+        // Each visual step represents a sixteenth note (8 substeps at 32nd note resolution)
+        const subsPerVisualStep = stepsPerBar / 16; // 128 / 16 = 8 substeps per visual step
+        
+        // Only trigger samples on visual step boundaries (every 8 substeps)
+        if (this.subStep % subsPerVisualStep === 0) {
+            // Check each pad to see if it should play at this visual step
             for (let padIndex = 0; padIndex < 16; padIndex++) {
                 const padSubdivision = this.sampleParams[padIndex].subdivision;
-                const stepsPerSubdivision = this.maxSubdivision / padSubdivision; // How many 32nd notes per subdivision
+                const visualStepsPerPadSubdivision = 16 / padSubdivision; // How many visual steps per pad subdivision
                 
-                // Check if this substep aligns with the pad's subdivision
-                if (this.subStep % stepsPerSubdivision === 0) {
-                    const padStep = Math.floor(this.subStep / stepsPerSubdivision) % 16;
+                // Check if this visual step aligns with the pad's subdivision
+                if (visualStep % visualStepsPerPadSubdivision === 0) {
                     
-                    if (this.sequencePatterns[this.currentBank][padIndex][padStep]) {
+                    if (this.sequencePatterns[this.currentBank][padIndex][visualStep]) {
                         // Calculate swing for this specific hit
                         let swingDelay = 0;
                         
                         // Determine if this hit is on a musical off-beat based on the pad's subdivision
-                        const isMusicalOffBeat = this.isMusicalOffBeat(padStep, padSubdivision);
+                        const isMusicalOffBeat = this.isMusicalOffBeat(visualStep, padSubdivision);
                         
                         if (isMusicalOffBeat) {
                             const quarterNoteTime = (60 / this.tempo) * 1000;
@@ -969,6 +973,7 @@ class PO33Sampler {
                     }
                 }
             }
+        }
             
             // Play off-grid notes
             for (let padIndex = 0; padIndex < 16; padIndex++) {
@@ -1609,19 +1614,21 @@ class PO33Sampler {
     }
 
     recordPadHit(padIndex) {
-        // Get the pad's current subdivision setting
+        // Calculate current visual step and subdivision alignment
+        const stepsPerBar = this.maxSubdivision * 4; // 128 substeps per bar
+        const visualStep = Math.floor((this.subStep / (stepsPerBar / 16)) % 16);
         const padSubdivision = this.sampleParams[padIndex].subdivision;
-        const stepsPerSubdivision = this.maxSubdivision / padSubdivision; // How many 32nd notes per subdivision
+        const visualStepsPerPadSubdivision = 16 / padSubdivision;
+        const subsPerVisualStep = stepsPerBar / 16; // 8 substeps per visual step
         
-        // Check if we're on a subdivision boundary for this pad
-        if (this.subStep % stepsPerSubdivision === 0) {
-            // On-grid recording for this pad's subdivision
-            const padStep = Math.floor(this.subStep / stepsPerSubdivision) % 16;
-            this.sequencePatterns[this.currentBank][padIndex][padStep] = true;
+        // Check if we're on a visual step boundary that aligns with this pad's subdivision
+        if (this.subStep % subsPerVisualStep === 0 && visualStep % visualStepsPerPadSubdivision === 0) {
+            // On-grid recording - record to the current visual step
+            this.sequencePatterns[this.currentBank][padIndex][visualStep] = true;
             
             // Update visual if this pad is currently selected in sequencer mode
             if (this.isSequencerMode && this.selectedPad === padIndex) {
-                const step = document.querySelector(`[data-step="${padStep}"]`);
+                const step = document.querySelector(`[data-step="${visualStep}"]`);
                 if (step) {
                     step.classList.add('active');
                 }

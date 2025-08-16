@@ -986,9 +986,9 @@ class PO33Sampler {
             this.playMetronomeClick();
         }
 
-        // Advance step counters (32 32nd notes = 1 full cycle through 16 visual steps)
-        this.subStep = (this.subStep + 1) % 32;
-        this.currentStep = Math.floor((this.subStep / 32) * 16);
+        // Advance step counters (128 32nd notes = 1 full cycle through 16 visual steps)
+        this.subStep = (this.subStep + 1) % 128;
+        this.currentStep = Math.floor((this.subStep / 128) * 16);
     }
 
     isMusicalOffBeat(step, subdivision) {

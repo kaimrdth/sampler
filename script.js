@@ -84,6 +84,16 @@ class PO33Sampler {
             maxZoom: 32.0      // Maximum zoom level
         }));
         
+        // Playhead tracking for waveform visualization
+        this.playheadPositions = new Array(16).fill(null).map(() => ({
+            isPlaying: false,
+            startTime: 0,
+            duration: 0,
+            position: 0,
+            trimStart: 0,
+            trimEnd: 1
+        }));
+        
         this.initializeAudio();
         this.setupEventListeners();
         this.updateTempo();
@@ -91,6 +101,7 @@ class PO33Sampler {
         this.setupMuteSoloControls();
         this.updateBankIndicators();
         this.createMetronomeSound();
+        this.startPlayheadUpdateLoop();
     }
 
     generateRandomPadColors() {
@@ -784,6 +795,9 @@ class PO33Sampler {
 
             // Clean up when source ends
             source.onended = () => {
+                // Stop playhead tracking
+                this.playheadPositions[index].isPlaying = false;
+                
                 if (params.polyMode === 'mono') {
                     if (this.activeSources[index] === source) {
                         this.activeSources[index] = null;
@@ -798,6 +812,17 @@ class PO33Sampler {
                         this.activeAudioNodes[index].sources.splice(sourceIndex, 1);
                     }
                 }
+            };
+
+            // Initialize playhead tracking
+            const playheadDuration = params.loopOnHold && this.padHoldState[index] ? trimDuration : trimDuration;
+            this.playheadPositions[index] = {
+                isPlaying: true,
+                startTime: currentTime,
+                duration: playheadDuration,
+                position: 0,
+                trimStart: params.trimStart,
+                trimEnd: params.trimEnd
             };
 
             // Start playback with trimming
@@ -1334,6 +1359,9 @@ class PO33Sampler {
         
         // Draw trim overlay
         this.updateTrimOverlay();
+        
+        // Draw playhead if sample is playing and we're viewing the currently playing pad
+        this.drawPlayhead();
     }
 
     setupTrimHandles() {
@@ -1511,6 +1539,68 @@ class PO33Sampler {
         document.getElementById('trim-start-value').textContent = startTime.toFixed(3);
         document.getElementById('trim-end-value').textContent = endTime.toFixed(3);
         document.getElementById('trim-length-value').textContent = length.toFixed(3);
+    }
+
+    updatePlayheadPosition(index) {
+        if (!this.playheadPositions[index].isPlaying || !this.audioContext) return;
+        
+        const playhead = this.playheadPositions[index];
+        const currentTime = this.audioContext.currentTime;
+        const elapsed = currentTime - playhead.startTime;
+        
+        // Calculate position within the trimmed range (0 to 1)
+        let progress = elapsed / playhead.duration;
+        
+        // Handle looping
+        if (progress > 1 && this.sampleParams[index].loopOnHold && this.padHoldState[index]) {
+            progress = progress % 1;
+        }
+        
+        playhead.position = Math.min(1, Math.max(0, progress));
+        
+        // If editing this pad, trigger a redraw
+        if (index === this.editingPad && this.isEditMode) {
+            this.drawWaveform();
+        }
+    }
+
+    drawPlayhead() {
+        const index = this.editingPad;
+        const playhead = this.playheadPositions[index];
+        
+        if (!playhead.isPlaying || !this.samples[index]) return;
+        
+        const canvas = document.getElementById('waveform-canvas');
+        const ctx = canvas.getContext('2d');
+        const zoom = this.waveformZoom[index];
+        
+        // Calculate playhead position in the sample
+        const trimmedPosition = playhead.trimStart + (playhead.position * (playhead.trimEnd - playhead.trimStart));
+        
+        // Check if playhead is visible in current zoom view
+        if (trimmedPosition < zoom.viewStart || trimmedPosition > zoom.viewEnd) return;
+        
+        // Convert to canvas x position
+        const viewWidth = zoom.viewEnd - zoom.viewStart;
+        const relativePosition = (trimmedPosition - zoom.viewStart) / viewWidth;
+        const x = relativePosition * canvas.width;
+        
+        // Draw playhead line
+        ctx.strokeStyle = '#ff4444';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+        
+        // Draw playhead triangle at top
+        ctx.fillStyle = '#ff4444';
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x - 6, 12);
+        ctx.lineTo(x + 6, 12);
+        ctx.closePath();
+        ctx.fill();
     }
 
     zoomWaveform(padIndex, factor, centerPoint = 0.5) {
@@ -2331,6 +2421,23 @@ class PO33Sampler {
         } catch (error) {
             console.error('Metronome playback error:', error);
         }
+    }
+
+    startPlayheadUpdateLoop() {
+        const updatePlayheads = () => {
+            // Update playhead positions for all playing samples
+            for (let i = 0; i < 16; i++) {
+                if (this.playheadPositions[i].isPlaying) {
+                    this.updatePlayheadPosition(i);
+                }
+            }
+            
+            // Continue the loop
+            requestAnimationFrame(updatePlayheads);
+        };
+        
+        // Start the loop
+        requestAnimationFrame(updatePlayheads);
     }
 }
 
